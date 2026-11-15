@@ -36,7 +36,7 @@ export async function performAction(it: ActItem, ctxWin: number, mod: boolean, s
       return it.url || undefined;
     }
     case 'closed':
-      await chrome.sessions.restore(it.id as string).catch(() => undefined);
+      await chrome.sessions?.restore(it.id as string).catch(() => undefined);
       return;
     case 'bookmark':
     case 'history':
@@ -47,12 +47,14 @@ export async function performAction(it: ActItem, ctxWin: number, mod: boolean, s
 }
 
 export async function loadBookmarks(frec: FrecMap): Promise<RawItem[]> {
+  if (!chrome.bookmarks) return []; // Safari
   const tree = await chrome.bookmarks.getTree().catch(() => []);
   return flattenBookmarks(tree, frec, Date.now());
 }
 
 export async function loadRecentHistory(): Promise<RawItem[]> {
   const now = Date.now();
+  if (!chrome.history) return []; // Safari
   const hist = await chrome.history
     .search({ text: '', startTime: now - HISTORY_RECENT_DAYS * 864e5, maxResults: HISTORY_RECENT_MAX })
     .catch(() => []);
@@ -60,6 +62,7 @@ export async function loadRecentHistory(): Promise<RawItem[]> {
 }
 
 export async function searchHistory(text: string): Promise<RawItem[]> {
+  if (!chrome.history) return [];
   const hist = await chrome.history.search({ text, startTime: 0, maxResults: 100 }).catch(() => []);
   return historyToRaw(hist, Date.now());
 }
@@ -73,4 +76,10 @@ export function openShortcutSettings(): void {
   const open = (chrome.commands as { openShortcutSettings?: () => Promise<void> }).openShortcutSettings;
   if (open) void open();
   else void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+}
+
+/** Recently closed tabs/windows; Safari has no sessions API. */
+export function recentlyClosed(): Promise<chrome.sessions.Session[]> {
+  if (!chrome.sessions) return Promise.resolve([]);
+  return chrome.sessions.getRecentlyClosed({ maxResults: 25 }).catch(() => []);
 }

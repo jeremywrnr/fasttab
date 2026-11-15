@@ -1,5 +1,7 @@
-// Builds dist/chrome and dist/firefox from one source tree.
-//   node scripts/build.mjs [--watch] [--target chrome|firefox]
+// Builds dist/chrome, dist/firefox and dist/safari from one source tree.
+//   node scripts/build.mjs [--watch] [--target chrome|firefox|safari]
+// dist/safari is the web-extension half; scripts/package-safari.sh wraps it
+// in the macOS app Safari requires.
 import * as esbuild from 'esbuild';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -10,7 +12,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const watch = args.includes('--watch');
 const only = args.includes('--target') ? args[args.indexOf('--target') + 1] : null;
-const targets = only ? [only] : ['chrome', 'firefox'];
+const targets = only ? [only] : ['chrome', 'firefox', 'safari'];
 
 function manifest(target) {
   const m = JSON.parse(readFileSync(join(root, 'src/manifest.base.json'), 'utf8'));
@@ -18,6 +20,12 @@ function manifest(target) {
     m.background = { service_worker: 'background.js' };
     m.permissions.push('favicon');
     m.minimum_chrome_version = '127'; // action.openPopup()
+  } else if (target === 'safari') {
+    m.background = { service_worker: 'background.js' };
+    // Safari has no tabGroups, sessions, bookmarks or history APIs; the code feature-detects them.
+    m.permissions = m.permissions.filter((p) => !['tabGroups', 'sessions', 'bookmarks', 'history'].includes(p));
+    m.browser_specific_settings = { safari: { strict_min_version: '17.0' } };
+    delete m.options_ui.open_in_tab; // Safari ignores it and warns
   } else {
     m.background = { scripts: ['background.js'] };
     // Opt-in "capture the shortcut on every page" (options page) asks for this at that moment.
@@ -54,11 +62,15 @@ for (const target of targets) {
     outdir: out,
     bundle: true,
     format: 'iife',
-    target: target === 'chrome' ? 'chrome121' : 'firefox128',
+    target: target === 'chrome' ? 'chrome121' : target === 'safari' ? 'safari17' : 'firefox128',
     minify: !watch,
     sourcemap: watch ? 'inline' : false,
     legalComments: 'none',
-    define: { __FIREFOX__: String(target === 'firefox') },
+    define: {
+      __FIREFOX__: String(target === 'firefox'),
+      __CHROME__: String(target === 'chrome'),
+      __SAFARI__: String(target === 'safari'),
+    },
     plugins: [staticPlugin(target, out)],
     logLevel: 'info',
   };

@@ -11,6 +11,7 @@ import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
 import type { FrecMap } from '../core/frecency.ts';
 import {
   currentShortcut,
+  recentlyClosed,
   loadBookmarks,
   loadRecentHistory,
   openShortcutSettings,
@@ -36,6 +37,7 @@ import { shortcutMatcher } from '../shared/shortcut.ts';
 import { captureEnabled, requestCapture } from '../shared/capture.ts';
 
 declare const __FIREFOX__: boolean;
+declare const __CHROME__: boolean;
 
 const GROUP_COLORS: Record<string, string> = {
   grey: '#80868b',
@@ -119,9 +121,9 @@ function layout(): void {
 
 // ------------------------------------------------------------------ rendering
 
-const faviconBase = __FIREFOX__ ? '' : chrome.runtime.getURL('/_favicon/');
+const faviconBase = __CHROME__ ? chrome.runtime.getURL('/_favicon/') : '';
 function faviconFor(it: Item): string {
-  if (__FIREFOX__) return it.fav ?? '';
+  if (!__CHROME__) return it.fav ?? ''; // Firefox/Safari: the tab's own favicon url
   if (!it.url) return '';
   return `${faviconBase}?pageUrl=${encodeURIComponent(it.url)}&size=32`;
 }
@@ -378,12 +380,12 @@ async function liveFallback(): Promise<void> {
   const [tabs, gs, cl] = await Promise.all([
     chrome.tabs.query({}),
     hasGroups() ? chrome.tabGroups.query({}) : Promise.resolve([]),
-    chrome.sessions.getRecentlyClosed({ maxResults: 25 }).catch(() => []),
+    recentlyClosed(),
   ]);
   if (fullLoaded) return;
   const groups = new Map<number, GroupInfo>(gs.map((g) => [g.id, g]));
   const now = Date.now();
-  const tabItems = tabs.filter((t) => t.id !== undefined).map((t) => tabToRaw(t, groups, {}, now, undefined, __FIREFOX__));
+  const tabItems = tabs.filter((t) => t.id !== undefined).map((t) => tabToRaw(t, groups, {}, now, undefined, !__CHROME__));
   fullLoaded = true;
   setBase(tabItems.concat(groupsToRaw(groups, tabItems), closedToRaw(cl)));
 }

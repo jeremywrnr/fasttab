@@ -1,7 +1,7 @@
 default:
     @just --list
 
-# Build dist/chrome and dist/firefox
+# Build dist/chrome, dist/firefox and dist/safari
 build:
     node scripts/build.mjs
 
@@ -26,9 +26,16 @@ run-firefox: build
 lint-firefox: build
     npx web-ext lint --source-dir dist/firefox
 
-# Zip both builds for upload
-zip: build
-    cd dist/chrome && zip -qr ../../fasttab-chrome.zip .
+# Package all three: Chrome Web Store zip, Firefox add-on zip, Safari macOS app (+ zip)
+package: build
+    rm -f fasttab-chrome.zip
+    cd dist/chrome && zip -qr -X ../../fasttab-chrome.zip .
     npx web-ext build --source-dir dist/firefox --artifacts-dir . --filename fasttab-firefox.zip --overwrite-dest
+    ./scripts/package-safari.sh
+    @ls -lh fasttab-chrome.zip fasttab-firefox.zip fasttab-safari.zip
+
+# Safari only (needs Xcode). TEAM_ID=<id> signs with your developer team.
+package-safari: build
+    ./scripts/package-safari.sh
 
 check: typecheck test build

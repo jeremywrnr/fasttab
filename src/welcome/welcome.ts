@@ -7,6 +7,7 @@ import { captureEnabled, disableCapture, requestCapture } from '../shared/captur
 import { openShortcutSettings } from '../shared/actions.ts';
 
 declare const __FIREFOX__: boolean;
+declare const __SAFARI__: boolean;
 
 const mac = navigator.platform.startsWith('Mac');
 const DEFAULT = mac ? '⌃K' : 'Alt+K';
@@ -29,7 +30,9 @@ function showKey(sc: string): void {
 }
 
 $('why').textContent = `The default is ${DEFAULT}. If another extension already holds it or you'd like a different key, change it in the browser's shortcut settings:`;
-const steps = __FIREFOX__
+const steps = __SAFARI__
+  ? ['Safari has no setting for extension shortcuts, so fasttab always uses ⌃K there. You can also click the fasttab button in the toolbar.']
+  : __FIREFOX__
   ? ['Click “Change shortcut” (about:addons → ⚙ → Manage Extension Shortcuts).', 'Find fasttab and click its shortcut box.', 'Press the keys you want.']
   : ['Click “Change shortcut”.', 'Find fasttab → “Open fasttab” and click the pencil.', 'Press the keys you want (⌘P works, and wins over Print).'];
 for (const s of steps) {
@@ -52,6 +55,7 @@ async function check(): Promise<void> {
 }
 
 $('open').addEventListener('click', () => openShortcutSettings());
+if (__SAFARI__) $('open').hidden = true;
 
 if (__FIREFOX__) {
   $('capture-card').hidden = false;

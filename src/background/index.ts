@@ -18,9 +18,10 @@ import {
 } from '../shared/raw.ts';
 import type { Msg } from '../shared/messages.ts';
 import { captureEnabled, SHORTCUT_KEY, syncCapture } from '../shared/capture.ts';
-import { currentShortcut, loadBookmarks, loadRecentHistory, openShortcutSettings, performAction, searchHistory } from '../shared/actions.ts';
+import { currentShortcut, recentlyClosed, loadBookmarks, loadRecentHistory, openShortcutSettings, performAction, searchHistory } from '../shared/actions.ts';
 
 declare const __FIREFOX__: boolean;
+declare const __CHROME__: boolean;
 
 const FREC_KEY = 'ft_frec';
 const DWELL_MS = 1000;
@@ -44,7 +45,7 @@ function init(): Promise<void> {
     const [all, gs, cl, store, win] = await Promise.all([
       chrome.tabs.query({}),
       hasGroups() ? chrome.tabGroups.query({}).catch(() => []) : Promise.resolve([]),
-      chrome.sessions.getRecentlyClosed({ maxResults: 25 }).catch(() => []),
+      recentlyClosed(),
       chrome.storage.local.get(FREC_KEY),
       chrome.windows.getLastFocused().catch(() => undefined),
     ]);
@@ -77,7 +78,7 @@ function buildItems(now: number): RawItem[] {
   const tabItems: RawItem[] = [];
   for (const t of tabs.values()) {
     if (t.id === undefined) continue;
-    tabItems.push(tabToRaw(t, groups, frec, now, lastAct.get(t.id), __FIREFOX__));
+    tabItems.push(tabToRaw(t, groups, frec, now, lastAct.get(t.id), !__CHROME__));
   }
   return tabItems.concat(groupsToRaw(groups, tabItems), closedToRaw(closed));
 }
@@ -141,7 +142,7 @@ chrome.tabs.onCreated.addListener(
 chrome.tabs.onUpdated.addListener(
   on((id: number, change: chrome.tabs.OnUpdatedInfo, t: chrome.tabs.Tab) => {
     tabs.set(id, t);
-    if (!__FIREFOX__ && 'favIconUrl' in change && Object.keys(change).length <= 2) return false; // Chrome draws favicons itself
+    if (__CHROME__ && 'favIconUrl' in change && Object.keys(change).length <= 2) return false; // Chrome draws favicons itself
     return RELEVANT.some((k) => k in change);
   }),
 );
@@ -203,9 +204,9 @@ if (hasGroups()) {
   );
 }
 
-chrome.sessions.onChanged.addListener(
+chrome.sessions?.onChanged.addListener(
   on(() => {
-    void chrome.sessions.getRecentlyClosed({ maxResults: 25 }).then((cl) => {
+    void recentlyClosed().then((cl) => {
       closed = cl;
       schedule();
     });

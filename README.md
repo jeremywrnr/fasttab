@@ -4,15 +4,20 @@ A fast, keyboard-first tab switcher for Chrome and Firefox, built for hundreds o
 
 **How it opens.** The shortcut injects a small transparent frame into the current page, only when pressed: no content script runs on pages otherwise, and the `activeTab` + `scripting` permissions carry no install-time warning. The frame is the extension's own page, so the site can't read it. Data and actions go through the background worker, and every request carries a one-time token, so a page that frames fasttab itself gets nothing. Where browsers forbid injection (new tab, `about:`/`chrome://` pages, the add-on stores) it opens the same UI as the toolbar popup.
 
-## Install (dev)
+## Install
 
 ```sh
 npm install
-just build          # dist/chrome and dist/firefox
+just package    # fasttab-chrome.zip, fasttab-firefox.zip, fasttab-safari.zip (+ dist/fasttab-safari.app)
 ```
 
-- **Chrome:** go to `chrome://extensions`, turn on Developer mode, then **Load unpacked** and pick `dist/chrome`.
-- **Firefox:** run `just run-firefox`, or load `dist/firefox/manifest.json` as a temporary add-on from `about:debugging`.
+| Browser | Load a dev build | Package |
+| --- | --- | --- |
+| **Firefox** | `about:debugging` → This Firefox → Load Temporary Add-on → `dist/firefox/manifest.json` (or `just run-firefox`) | `fasttab-firefox.zip` for addons.mozilla.org, or sign it unlisted with `web-ext sign` to install permanently |
+| **Chrome** | `chrome://extensions` → Developer mode → Load unpacked → `dist/chrome` | `fasttab-chrome.zip` is what the Chrome Web Store upload takes |
+| **Safari** (macOS, needs Xcode) | Open `dist/fasttab-safari.app` once. Then in Safari: Settings → Advanced → turn on "Show features for web developers", choose Develop → Allow Unsigned Extensions, and enable fasttab under Settings → Extensions. | `just package-safari` builds an ad-hoc-signed app via `safari-web-extension-converter`. `TEAM_ID=<team> just package-safari` signs it with your Apple Developer team so it loads without the unsigned-extensions switch. |
+
+Safari has no tab groups, recently-closed, bookmarks or history APIs, so the Safari build searches open tabs only. It also has no settings page for extension shortcuts, so ⌃K is fixed there.
 
 ## Shortcut
 
