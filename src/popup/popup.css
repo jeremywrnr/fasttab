@@ -12,7 +12,15 @@
   --dim-sel: 0.75;
   color-scheme: light dark;
 }
+/* Overlay: must equal the frame element's color-scheme (set from the same
+   media query when injected), or the browser paints the frame opaque. */
+html.overlay {
+  color-scheme: light;
+}
 @media (prefers-color-scheme: dark) {
+  html.overlay {
+    color-scheme: dark;
+  }
   :root {
     --bg: #1e1f22;
     --fg: #e6e6e6;
@@ -37,16 +45,6 @@ body {
   overflow: hidden;
 }
 /* Overlay mode: transparent frame centered on the page; the panel floats. */
-/* Must equal the frame element's color-scheme (set from the same media query
-   when injected), or the browser paints the frame opaque over the page. */
-html.overlay {
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  html.overlay {
-    color-scheme: dark;
-  }
-}
 html.overlay,
 html.overlay body {
   width: 100%;

@@ -113,11 +113,22 @@ const SHARED_HOSTS = new Set([
   'herokuapp.com', 'blogspot.com', 'substack.com', 'notion.site', 'wordpress.com', 'fly.dev', 'onrender.com',
 ]);
 
-/** "app.plan.io" → "plan.io", "news.bbc.co.uk" → "bbc.co.uk", "you.github.io" stays. */
+/**
+ * "app.plan.io" → "plan.io", "news.bbc.co.uk" → "bbc.co.uk", "you.github.io" stays.
+ * Best-effort and for display only (not a public-suffix list): never key data on it.
+ */
 export function rootDomain(host: string): string {
   const p = host.split('.');
   if (p.length <= 2 || /^[\d.]+$/.test(host)) return host;
   const last2 = p.slice(-2).join('.');
   const take = SHARED_HOSTS.has(last2) || (p[p.length - 1].length === 2 && CC_SECOND.has(p[p.length - 2])) ? 3 : 2;
   return p.slice(-take).join('.');
+}
+
+/** What the url column shows: the root domain for web pages, a short form for the rest. */
+export function siteLabel(url: string): string {
+  if (/^(moz|chrome|safari-web)-extension:/.test(url)) return 'extension';
+  const host = hostOf(url);
+  if (host) return rootDomain(host);
+  return /^[a-z-]+:(?:\/\/)?[^/?#]*/i.exec(url)?.[0] ?? url;
 }

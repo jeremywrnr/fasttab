@@ -6,13 +6,13 @@
 //   stage 3  idle     bookmarks + recent history
 //   stage 4  typing   live history.search (debounced) for older pages
 
-import { keyOf, SEP } from '../core/prepare.ts';
+import { keyOf, siteOf } from '../core/prepare.ts';
 import { parseQuery } from '../core/query.ts';
 import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
 import type { Item, RawItem } from '../core/types.ts';
 import { actionLabels, recentlyClosed } from '../shared/actions.ts';
 import { buildRaw, FAVICONS, hasGroups, type FaviconMap, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
-import { hostOf, rootDomain } from '../core/text.ts';
+import { hostOf } from '../core/text.ts';
 import { DEFAULT_SHORTCUT, prettyShortcut, shortcutMatcher } from '../shared/shortcut.ts';
 import { direct, send, viaBackground, type Backend } from './backend.ts';
 import { iconImg, setIcon, VList, type Row } from './vlist.ts';
@@ -160,25 +160,6 @@ const KIND_MARK: Partial<Record<Item['k'], [string, string]>> = {
   history: ['◷', 'History'],
   closed: ['↺', 'Recently closed'],
 };
-
-/**
- * What the url column shows: the root domain for web pages, a short form for
- * the rest. Returns the text and its offset in the haystack (for highlights),
- * or -1 when it isn't a substring of it.
- */
-function siteOf(it: Item): [string, number] {
-  if (it.uOff < 0) return ['', -1];
-  if (/^(moz|chrome|safari-web)-extension:/.test(it.url)) return ['extension', -1];
-  const host = hostOf(it.url);
-  if (host) {
-    const site = rootDomain(host);
-    const end = it.gOff >= 0 ? it.gOff - SEP.length : it.hay.length;
-    const at = it.hay.lastIndexOf(site, end);
-    return [site, at >= it.uOff ? at : -1];
-  }
-  const short = /^[a-z-]+:(?:\/\/)?[^/?#]*/i.exec(it.url)?.[0] ?? it.url;
-  return [short, it.hay.indexOf(short, it.uOff) === it.uOff ? it.uOff : -1];
-}
 
 function renderRow(row: Row, i: number): void {
   if (!res) return;
