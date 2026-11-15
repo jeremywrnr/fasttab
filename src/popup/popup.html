@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>fasttab</title>
+    <style>
+      /*INLINE_CSS*/
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <input id="q" type="text" autocomplete="off" spellcheck="false" autofocus placeholder="Switch to tab…  (g: groups  w: window  c: closed  b: bookmarks  h: history)" />
+    </div>
+    <div id="scroller" tabindex="-1">
+      <div id="inner"></div>
+      <div id="empty" hidden>No matches</div>
+    </div>
+    <div class="foot">
+      <span id="status"></span>
+      <span class="keys"><kbd>↵</kbd> switch <kbd>⇧↵</kbd> solo group <kbd>⌘↵</kbd> open here <kbd>⌘⌫</kbd> close tab</span>
+      <a id="shortcut" href="#" hidden></a>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
