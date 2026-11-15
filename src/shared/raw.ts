@@ -115,29 +115,33 @@ export function closedToRaw(sessions: chrome.sessions.Session[]): RawItem[] {
 
 export function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], frec: FrecMap, now: number): RawItem[] {
   const out: RawItem[] = [];
-  // `path` is the user folders above the bookmark ("Recipes/Bread"). The chip
-  // shows the last one; its color hashes the whole path, so nested folders
-  // with the same name still differ.
-  const walk = (ns: chrome.bookmarks.BookmarkTreeNode[], path: string[]) => {
+  // The root's children are the browser's own folders (Bookmarks Bar, Other
+  // Bookmarks, Firefox's Menu/Toolbar…), so user folders start at depth 2.
+  // A bookmark's chip shows its nearest folder; the color hashes the whole
+  // path ("Recipes/Bread"), worked out once per folder, so nested folders with
+  // the same name still differ.
+  const walk = (ns: chrome.bookmarks.BookmarkTreeNode[], depth: number, folder: string, path: string, hue: number) => {
     for (const n of ns) {
       if (n.url) {
         if (n.url.startsWith('javascript:')) continue;
         const r: RawItem = { k: 'bookmark', id: n.id, title: n.title || n.url, url: n.url, la: n.dateAdded };
-        if (path.length) {
-          r.gt = path[path.length - 1];
-          r.gh = hueOf(path.join('/'));
+        if (folder) {
+          r.gt = folder;
+          r.gh = hue;
         }
         const fr = lookup(frec, n.url, now);
         if (fr > 0.05) r.fr = fr;
         out.push(r);
       } else if (n.children) {
-        // Skip the root folder names ("Bookmarks Bar", "Other Bookmarks"); keep user folders.
-        const userFolder = n.parentId && n.parentId !== '0' && n.parentId !== 'root________';
-        walk(n.children, userFolder ? [...path, n.title] : path);
+        if (depth < 2) walk(n.children, depth + 1, folder, path, hue);
+        else {
+          const p = path ? path + '/' + n.title : n.title;
+          walk(n.children, depth + 1, n.title, p, hueOf(p));
+        }
       }
     }
   };
-  walk(nodes, []);
+  walk(nodes, 0, '', '', 0);
   return out;
 }
 
