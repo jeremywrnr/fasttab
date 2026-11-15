@@ -65,8 +65,8 @@ const $panel = document.getElementById('panel')!;
 const TOKEN = location.hash.startsWith('#o=') ? location.hash.slice(3) : '';
 const OVERLAY = !!TOKEN;
 if (OVERLAY) document.documentElement.classList.add('overlay');
-const MAX_ROWS = 8;
-const ROW_H = 44;
+const MAX_ROWS = 10;
+const ROW_H = 32;
 
 const s = new Searcher();
 let res: Result | null = null;
@@ -170,14 +170,18 @@ function badgeFor(it: Item): string {
     }
     case 'group':
       return `${it.n} tab${it.n === 1 ? '' : 's'}${it.col ? ' · collapsed' : ''}`;
-    case 'closed':
-      return 'closed';
-    case 'bookmark':
-      return 'bookmark';
-    case 'history':
-      return 'history';
+    default:
+      return ''; // the glyph says it
   }
 }
+
+// Non-tab results get a glyph in the icon column and are dimmed, so open tabs
+// stand out at a glance.
+const GLYPH: Partial<Record<Item['k'], [string, string]>> = {
+  bookmark: ['★', 'Bookmark'],
+  history: ['◷', 'History'],
+  closed: ['↺', 'Recently closed'],
+};
 
 function renderRow(row: Row, i: number): void {
   if (!res) return;
@@ -187,21 +191,22 @@ function renderRow(row: Row, i: number): void {
   if (row.sig === sig) return;
   row.sig = sig;
   const pos = res.q.groups.length ? positionsFor(it, res.q) : [];
-  // icon
-  if (it.k === 'group') {
-    row.fav.hidden = true;
-    row.dot.hidden = false;
-    row.dot.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
-  } else {
-    row.dot.hidden = true;
-    const src = faviconFor(it);
-    row.fav.hidden = !src;
-    if (src && row.fav.getAttribute('src') !== src) row.fav.src = src;
-  }
+  row.el.className = 'row k-' + it.k + (i === sel ? ' sel' : '');
+  // icon column: favicon for tabs, group colour, or a kind glyph; always occupies its slot
+  const glyph = GLYPH[it.k];
+  let src = it.k === 'tab' ? faviconFor(it) : '';
+  if (src && row.fav.dataset.failed === src) src = ''; // known-broken favicon: use the neutral icon
+  row.fav.hidden = !src;
+  if (src && row.fav.getAttribute('src') !== src) row.fav.src = src;
+  row.dot.hidden = !!src;
+  row.dot.className = it.k === 'group' ? 'ico dot' : glyph ? 'ico glyph' : 'ico live';
+  row.dot.textContent = glyph ? glyph[0] : '';
+  row.dot.title = glyph ? glyph[1] : '';
+  if (it.k === 'group') row.dot.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
   highlight(row.t, it.title, 0, pos);
   const disp = it.k === 'group' ? '' : prettyUrl(it.url);
   if (it.uOff >= 0) highlight(row.u, disp, it.uOff, pos);
-  else row.u.textContent = it.k === 'group' ? 'Tab group' : disp;
+  else row.u.textContent = it.k === 'group' ? 'tab group' : disp;
   if (it.gt && it.k !== 'group') {
     row.chip.hidden = false;
     highlight(row.chip, it.gt, it.gOff, pos);

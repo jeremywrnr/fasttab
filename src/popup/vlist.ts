@@ -23,7 +23,12 @@ function makeRow(): Row {
   fav.className = 'fav';
   fav.decoding = 'async';
   fav.alt = '';
-  fav.onerror = () => (fav.hidden = true);
+  // missing favicon: fall back to the neutral icon so columns stay aligned
+  fav.onerror = () => {
+    fav.dataset.failed = fav.getAttribute('src') ?? '';
+    fav.hidden = true;
+    dot.hidden = false;
+  };
   const dot = document.createElement('span');
   dot.className = 'dot';
   const txt = document.createElement('div');

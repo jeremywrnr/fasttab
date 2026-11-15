@@ -7,7 +7,8 @@
   --sel-bar: #1a73e8;
   --mark: #1a73e8;
   --chip-fg: #ffffff;
-  --row-h: 44px;
+  --row-h: 32px;
+  --dim: 0.62;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -106,7 +107,7 @@ html.overlay .panel {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px 0 10px;
+  padding: 0 14px 0 15px;
   border-left: 3px solid transparent;
   cursor: default;
   contain: strict;
@@ -115,33 +116,72 @@ html.overlay .panel {
   background: var(--sel);
   border-left-color: var(--sel-bar);
 }
-.fav {
+.fav,
+.ico {
   width: 16px;
   height: 16px;
   flex: none;
+}
+.fav {
   border-radius: 3px;
 }
-.dot {
-  width: 12px;
-  height: 12px;
-  margin: 2px;
-  flex: none;
+.ico {
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+}
+.ico.dot::before {
+  content: '';
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--c, #888);
+}
+/* open tab without a favicon: small accent dot = "live" */
+.ico.live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sel-bar);
 }
 .txt {
   flex: 1;
   min-width: 0;
-}
-.t,
-.u {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   white-space: nowrap;
+}
+.t {
+  flex: 0 1 auto;
+  max-width: 72%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .u {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--muted);
   font-size: 11.5px;
+}
+/* bookmarks, history, closed: recede so open tabs read first */
+.row.k-bookmark .t,
+.row.k-history .t,
+.row.k-closed .t {
+  opacity: var(--dim);
+}
+.row.k-bookmark .chip,
+.row.k-history .chip,
+.row.k-closed .chip {
+  opacity: 0.7;
+}
+.row.k-tab .t {
+  font-weight: 500;
 }
 mark {
   background: none;
@@ -154,8 +194,8 @@ mark {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
-  padding: 1px 7px;
+  font-size: 10.5px;
+  padding: 0 7px;
   border-radius: 9px;
   background: var(--c, #888);
   color: var(--chip-fg);

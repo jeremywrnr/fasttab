@@ -1,4 +1,5 @@
 import { exactMatch, fuzzyMatch, scoreRange } from './fzf.ts';
+import { normUrl } from './frecency.ts';
 import { clsOf, prepare, SEP } from './prepare.ts';
 import { canNarrow, parseQuery, type Query, type Term } from './query.ts';
 import type { Item, Kind, RawItem } from './types.ts';
@@ -222,12 +223,15 @@ export class Searcher {
   }
 
   private rebuild(now = Date.now()): void {
+    // An open tab beats a bookmark, history entry or closed tab for the same
+    // page (ignoring #fragment and trailing slash): switching is what you want.
     const open = new Set<string>();
-    for (const it of this.base) if (it.k === 'tab') open.add(it.url);
-    const bm = this.bookmarks.filter((it) => !open.has(it.url));
-    for (const it of bm) open.add(it.url);
-    const hist = this.history.filter((it) => !open.has(it.url));
-    let all = this.base.concat(bm, hist);
+    for (const it of this.base) if (it.k === 'tab') open.add(normUrl(it.url));
+    const base = this.base.filter((it) => it.k !== 'closed' || !it.url || !open.has(normUrl(it.url)));
+    const bm = this.bookmarks.filter((it) => !open.has(normUrl(it.url)));
+    for (const it of bm) open.add(normUrl(it.url));
+    const hist = this.history.filter((it) => !open.has(normUrl(it.url)));
+    let all = base.concat(bm, hist);
     if (all.length > MAX_ITEMS) all = all.slice(0, MAX_ITEMS);
     for (let i = 0; i < all.length; i++) {
       const it = all[i];

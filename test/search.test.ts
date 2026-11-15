@@ -101,6 +101,17 @@ describe('Searcher', () => {
     expect(ks[ks.length - 1]).toBe('h:https://pulls.dev');
   });
 
+  it('an open tab hides the same page as bookmark, history or closed, ignoring #fragment', () => {
+    const s = new Searcher();
+    s.setBase([
+      { k: 'tab', id: 1, title: 'Guide to the Job Hunt', url: 'https://alvinwan.com/job-hunting', win: 1 },
+      { k: 'closed', id: 'c1', title: 'Guide to the Job Hunt', url: 'https://alvinwan.com/job-hunting/#fn:1' },
+    ]);
+    s.setBookmarks([{ k: 'bookmark', id: 'b1', title: 'Guide to the Job Hunt', url: 'https://alvinwan.com/job-hunting/#fn:1' }]);
+    s.addHistory([{ k: 'history', id: 'h', title: 'Guide to the Job Hunt', url: 'https://alvinwan.com/job-hunting#top' }]);
+    expect(keys(s.search('guide'))).toEqual(['t:1']);
+  });
+
   it('incremental narrowing gives the same result as a full search', () => {
     const lines = makeLines(3000);
     const raws: RawItem[] = lines.map((l, i) => ({ k: 'tab', id: i, title: l, url: '', win: 1 }));
