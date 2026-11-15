@@ -37,8 +37,15 @@ body {
   overflow: hidden;
 }
 /* Overlay mode: transparent frame centered on the page; the panel floats. */
+/* Must equal the frame element's color-scheme (set from the same media query
+   when injected), or the browser paints the frame opaque over the page. */
 html.overlay {
-  color-scheme: normal; /* must match the embedding element or the frame paints opaque */
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  html.overlay {
+    color-scheme: dark;
+  }
 }
 html.overlay,
 html.overlay body {

@@ -358,10 +358,14 @@ function injectOverlay(src: string, origin: string): string {
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;';
   const root = host.attachShadow({ mode: 'closed' });
   // Transparent and full-viewport: the switcher positions its panel itself and
-  // treats clicks outside it as "close".
+  // treats clicks outside it as "close". Browsers paint a frame opaque when its
+  // color-scheme differs from its document's, and a site's <meta color-scheme>
+  // changes what "normal" means here (GitHub: the page vanished behind white).
+  // So both sides name the scheme explicitly, from the same media query.
+  const scheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   const frame = document.createElement('iframe');
   frame.src = src;
-  frame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;color-scheme:normal;';
+  frame.style.cssText = `position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;color-scheme:${scheme};`;
   root.appendChild(frame);
   const prev = document.activeElement as HTMLElement | null;
   const onMsg = (e: MessageEvent) => {
