@@ -7,6 +7,8 @@
   --sel-bar: #1a73e8;
   --mark: #1a73e8;
   --chip-fg: #ffffff;
+  /* bookmark folder chips: lightness that reads under --chip-fg */
+  --folder-l: 40%;
   --row-h: 32px;
   --dim: 0.4;
   --dim-sel: 0.75;
@@ -30,6 +32,7 @@ html.overlay {
     --sel-bar: #8ab4f8;
     --mark: #8ab4f8;
     --chip-fg: #111;
+    --folder-l: 70%;
   }
 }
 * {

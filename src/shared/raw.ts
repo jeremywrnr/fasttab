@@ -3,6 +3,7 @@
 // history).
 
 import { lookup, type FrecMap } from '../core/frecency.ts';
+import { hueOf } from '../core/text.ts';
 import type { RawItem } from '../core/types.ts';
 
 export const SNAP_TOP = 'ft_top';
@@ -114,22 +115,29 @@ export function closedToRaw(sessions: chrome.sessions.Session[]): RawItem[] {
 
 export function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], frec: FrecMap, now: number): RawItem[] {
   const out: RawItem[] = [];
-  const walk = (ns: chrome.bookmarks.BookmarkTreeNode[], folder: string) => {
+  // `path` is the user folders above the bookmark ("Recipes/Bread"). The chip
+  // shows the last one; its color hashes the whole path, so nested folders
+  // with the same name still differ.
+  const walk = (ns: chrome.bookmarks.BookmarkTreeNode[], path: string[]) => {
     for (const n of ns) {
       if (n.url) {
         if (n.url.startsWith('javascript:')) continue;
         const r: RawItem = { k: 'bookmark', id: n.id, title: n.title || n.url, url: n.url, la: n.dateAdded };
-        if (folder) r.gt = folder;
+        if (path.length) {
+          r.gt = path[path.length - 1];
+          r.gh = hueOf(path.join('/'));
+        }
         const fr = lookup(frec, n.url, now);
         if (fr > 0.05) r.fr = fr;
         out.push(r);
       } else if (n.children) {
         // Skip the root folder names ("Bookmarks Bar", "Other Bookmarks"); keep user folders.
-        walk(n.children, n.parentId && n.parentId !== '0' && n.parentId !== 'root________' ? n.title : folder);
+        const userFolder = n.parentId && n.parentId !== '0' && n.parentId !== 'root________';
+        walk(n.children, userFolder ? [...path, n.title] : path);
       }
     }
   };
-  walk(nodes, '');
+  walk(nodes, []);
   return out;
 }
 

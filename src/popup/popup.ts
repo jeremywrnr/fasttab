@@ -185,7 +185,11 @@ function renderRow(row: Row, i: number): void {
   if (it.gt && it.k !== 'group') {
     row.chip.hidden = false;
     highlight(row.chip, it.gt, it.gOff, pos);
-    row.chip.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
+    // tab groups use their browser color; bookmark folders a hue from their path
+    row.chip.style.setProperty(
+      '--c',
+      it.gh !== undefined ? `hsl(${it.gh} 55% var(--folder-l))` : (GROUP_COLORS[it.gc ?? ''] ?? '#888'),
+    );
   } else row.chip.hidden = true;
   const b = badgeFor(it);
   row.badge.hidden = !b;
