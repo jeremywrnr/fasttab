@@ -38,6 +38,9 @@ const $scroller = document.getElementById('scroller')!;
 const $inner = document.getElementById('inner')!;
 const $empty = document.getElementById('empty')!;
 const $act = document.getElementById('act')!;
+const $next = document.getElementById('next')!;
+const $nextIcon = document.getElementById('next-icon') as HTMLImageElement;
+$nextIcon.onerror = () => ($nextIcon.hidden = true);
 const $shortcut = document.getElementById('shortcut') as HTMLAnchorElement;
 const $results = document.getElementById('results')!;
 const $panel = document.getElementById('panel')!;
@@ -78,6 +81,15 @@ function layout(): void {
   $results.hidden = !show;
   $inner.parentElement!.style.height = n ? Math.min(n, MAX_ROWS) * list.rowH + 'px' : '';
   $empty.hidden = n > 0 || !fullLoaded;
+  // Empty query: show on the right where ↵ goes (the previous tab's favicon).
+  const next = !$q.value && res && n ? at(res, 0) : null;
+  $next.hidden = !next;
+  if (next) {
+    const src = faviconFor(next);
+    $nextIcon.hidden = !src;
+    if (src && $nextIcon.getAttribute('src') !== src) $nextIcon.src = src;
+    $next.title = next.title;
+  }
   if (OVERLAY) {
     // panel bottom (includes its top margin) plus its bottom margin, which holds the shadow
     const h = Math.ceil($panel.getBoundingClientRect().bottom + parseFloat(getComputedStyle($panel).marginBottom));
@@ -204,7 +216,7 @@ list.onHover = (i) => {
 /** Draw rows and say in the footer what ↵ does for the selected one. */
 function redraw(): void {
   list.draw();
-  $act.textContent = res && sel < count() ? `↵ ${actionLabel(at(res, sel))}   ⇧↵ New window` : '';
+  $act.textContent = res && sel < count() ? actionLabel(at(res, sel)) : '';
 }
 
 function count(): number {

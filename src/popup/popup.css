@@ -80,6 +80,20 @@ html.overlay .panel {
 #q::placeholder {
   color: var(--muted);
 }
+/* empty query: ↵ and the favicon of the tab it jumps to, at the right */
+#next {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+#next-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
 #results {
   border-top: 1px solid var(--line);
 }
@@ -283,6 +297,15 @@ mark {
   font-size: 11px;
   white-space: pre;
   opacity: 0.6;
+}
+.acts {
+  display: flex;
+  gap: 14px;
+}
+/* fixed width so "⇧↵ New window" never shifts as the label changes */
+#act {
+  display: inline-block;
+  width: 3em;
 }
 #shortcut {
   color: inherit;

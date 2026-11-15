@@ -11,6 +11,7 @@
     <div class="panel" id="panel">
       <div class="bar">
         <input id="q" type="text" autocomplete="off" spellcheck="false" autofocus placeholder="Search tabs" />
+        <span id="next" hidden><span class="enter">↵</span><img id="next-icon" alt="" /></span>
       </div>
       <div id="results" hidden>
         <div id="scroller" tabindex="-1">
@@ -18,7 +19,7 @@
           <div id="empty" hidden>No matches</div>
         </div>
         <div class="foot">
-          <span id="act"></span>
+          <span class="acts"><span>↵ <span id="act"></span></span><span>⇧↵ New window</span></span>
           <a id="shortcut" href="#" hidden></a>
         </div>
       </div>

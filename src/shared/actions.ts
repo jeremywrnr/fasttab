@@ -11,20 +11,9 @@ export type ActItem = Pick<RawItem, 'k' | 'id' | 'win' | 'mru' | 'col' | 'url'>;
 export const HISTORY_RECENT_DAYS = 30;
 export const HISTORY_RECENT_MAX = 1500;
 
-/** What ↵ does for each kind; shown in the switcher's footer. */
-export function actionLabel(it: Pick<RawItem, 'k' | 'n' | 'url'>): string {
-  switch (it.k) {
-    case 'tab':
-      return 'Switch to tab';
-    case 'group':
-      return 'Open group';
-    case 'closed':
-      return it.url ? 'Reopen tab' : 'Reopen window';
-    case 'bookmark':
-      return 'Open bookmark';
-    case 'history':
-      return 'Open page';
-  }
+/** What ↵ does, for the switcher's footer: jump to an open tab, open anything else. */
+export function actionLabel(it: Pick<RawItem, 'k'>): string {
+  return it.k === 'tab' ? 'Jump' : 'Open';
 }
 
 /**

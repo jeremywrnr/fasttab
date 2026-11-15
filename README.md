@@ -37,7 +37,7 @@ You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:ad
 | ⇧↵ | the same in a new window (a tab or group moves there) |
 | Esc, ⌃K again, or click outside | close |
 
-The footer is just that ↵ hint and the shortcut; click the shortcut for fasttab's settings.
+The footer shows **↵ Jump** (open tab) or **↵ Open** (anything else), **⇧↵ New window**, and the shortcut, which opens fasttab's settings. With an empty query, the right end of the search bar shows ↵ and the favicon of the tab it will jump to.
 
 **Minimal first:** only the search bar shows until you type. **⌃K then ↵** switches to your previous tab, like alt-tab. A leading space (or ↓) lists every open tab, most recent first.
 
