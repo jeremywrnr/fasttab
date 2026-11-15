@@ -10,7 +10,7 @@ import { keyOf, SEP } from '../core/prepare.ts';
 import { parseQuery } from '../core/query.ts';
 import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
 import type { Item, RawItem } from '../core/types.ts';
-import { recentlyClosed } from '../shared/actions.ts';
+import { actionLabel, recentlyClosed } from '../shared/actions.ts';
 import { buildRaw, hasGroups, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
 import { DEFAULT_SHORTCUT, prettyShortcut, shortcutMatcher } from '../shared/shortcut.ts';
 import { direct, send, viaBackground, type Backend } from './backend.ts';
@@ -36,9 +36,8 @@ const $q = document.getElementById('q') as HTMLInputElement;
 const $scroller = document.getElementById('scroller')!;
 const $inner = document.getElementById('inner')!;
 const $empty = document.getElementById('empty')!;
-const $status = document.getElementById('status')!;
+const $act = document.getElementById('act')!;
 const $shortcut = document.getElementById('shortcut') as HTMLAnchorElement;
-const $hint = document.getElementById('hint')!;
 const $results = document.getElementById('results')!;
 const $panel = document.getElementById('panel')!;
 
@@ -58,7 +57,6 @@ let res: Result | null = null;
 let sel = 0;
 let snapV = -1;
 let fullLoaded = false;
-let firstPaint = 0;
 
 function dismiss(): void {
   if (OVERLAY) parent.postMessage({ ft: 'close' }, '*');
@@ -79,8 +77,6 @@ function layout(): void {
   $results.hidden = !show;
   $inner.parentElement!.style.height = n ? Math.min(n, MAX_ROWS) * list.rowH + 'px' : '';
   $empty.hidden = n > 0 || !fullLoaded;
-  // Collapsed: hint at what Enter will do.
-  $hint.textContent = !show && res && n ? '↵ ' + at(res, 0).title : '';
   if (OVERLAY) {
     const h = Math.ceil($panel.getBoundingClientRect().height) + 6 + 28; // panel margins
     if (h !== lastH) {
@@ -194,14 +190,20 @@ function renderRow(row: Row, i: number): void {
 
 const list = new VList($scroller, $inner, renderRow, (i, e) => {
   sel = i;
-  activate(e.metaKey || e.ctrlKey, e.shiftKey);
+  void activate(e.shiftKey);
 });
 list.onHover = (i) => {
   if (i !== sel) {
     sel = i;
-    list.draw();
+    redraw();
   }
 };
+
+/** Draw rows and say in the footer what ↵ does for the selected one. */
+function redraw(): void {
+  list.draw();
+  $act.textContent = res && sel < count() ? `↵ ${actionLabel(at(res, sel))}   ⇧↵ New window` : '';
+}
 
 function count(): number {
   return res ? res.ids.length : 0;
@@ -223,20 +225,7 @@ function refresh(keepSelection: boolean): void {
   layout();
   list.setCount(count());
   list.reveal(sel);
-  list.draw();
-  if (!firstPaint && count()) {
-    // performance.now() counts from the popup document's navigation start
-    firstPaint = performance.now();
-    console.debug(`[fasttab] first rows painted in ${firstPaint.toFixed(1)}ms`);
-  }
-  status();
-}
-
-function status(): void {
-  if (!res) return;
-  const n = count();
-  const lbl = res.q.groups.length || res.q.scope ? `${n} match${n === 1 ? '' : 'es'}` : `${n} tabs`;
-  $status.textContent = fullLoaded ? `${lbl} · ${firstPaint.toFixed(0)}ms` : 'loading…';
+  redraw();
 }
 
 function move(d: number): void {
@@ -245,36 +234,22 @@ function move(d: number): void {
   if (!showList()) {
     expanded = true;
     layout();
-    list.reveal(sel);
-    list.draw();
-    return;
+  } else {
+    sel = (sel + d + n) % n;
   }
-  sel = (sel + d + n) % n;
   list.reveal(sel);
-  list.draw();
+  redraw();
 }
 
 // ------------------------------------------------------------------ actions
 
-async function activate(mod: boolean, shift: boolean): Promise<void> {
+async function activate(newWindow: boolean): Promise<void> {
   if (!res || sel >= count()) return;
   const it = at(res, sel);
   // A group opens its most recent tab; credit that page.
   const url = it.k === 'group' ? (s.get(keyOf({ k: 'tab', id: it.mru ?? -1 } as RawItem))?.url ?? '') : it.url;
-  await api.act({ k: it.k, id: it.id, win: it.win, mru: it.mru, col: it.col, url }, s.context.win, mod, shift);
+  await api.act({ k: it.k, id: it.id, win: it.win, mru: it.mru, col: it.col, url }, s.context.win, newWindow);
   dismiss();
-}
-
-async function closeSelected(): Promise<void> {
-  if (!res || sel >= count()) return;
-  const it = at(res, sel);
-  if (it.k !== 'tab') return;
-  const keep = sel;
-  s.remove(it.key);
-  refresh(false);
-  sel = Math.min(keep, Math.max(0, count() - 1)); // stay on the row below the closed one
-  list.draw();
-  await api.closeTab(it.id as number);
 }
 
 // ------------------------------------------------------------------ input
@@ -309,8 +284,8 @@ $q.addEventListener('keydown', (e) => {
       raf = 0;
       refresh(false);
     }
-    void activate(e.metaKey || e.ctrlKey, e.shiftKey);
-  } else if (k === 'Backspace' && (e.metaKey || e.ctrlKey)) void closeSelected();
+    void activate(e.shiftKey);
+  }
   else if (k === 'Escape') dismiss();
   else return;
   e.preventDefault();
@@ -379,32 +354,14 @@ let toggleKey = shortcutMatcher(DEFAULT_SHORTCUT());
 async function shortcutHint(): Promise<void> {
   const sc = await api.shortcut();
   toggleKey = shortcutMatcher(sc || DEFAULT_SHORTCUT());
+  // The shortcut itself, linking to fasttab's settings (shortcut, "work everywhere").
   $shortcut.hidden = false;
-  $shortcut.textContent = sc ? prettyShortcut(sc) : 'shortcut';
-  $shortcut.title = 'Change the fasttab shortcut';
+  $shortcut.textContent = prettyShortcut(sc);
+  $shortcut.title = 'fasttab settings';
   $shortcut.onclick = (e) => {
     e.preventDefault();
     api.openSettings();
     dismiss();
-  };
-  if (__FIREFOX__) void captureHint(sc);
-}
-
-// Firefox, while "shortcut everywhere" is off: a quiet footer link to turn it on.
-async function captureHint(sc: string): Promise<void> {
-  if (await api.capture()) return;
-  const $fix = document.getElementById('fix') as HTMLAnchorElement;
-  $fix.textContent = `${prettyShortcut(sc)} blocked on some sites? Fix`;
-  $fix.hidden = false;
-  $shortcut.hidden = true;
-  $fix.onclick = (e) => {
-    e.preventDefault();
-    // Straight from the click: the toolbar popup asks for the permission here.
-    void api.fixCapture().then((on) => {
-      $fix.hidden = on;
-      $shortcut.hidden = !on;
-    });
-    if (OVERLAY) dismiss();
   };
 }
 

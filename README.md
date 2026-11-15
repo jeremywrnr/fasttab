@@ -32,14 +32,14 @@ You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:ad
 | Key | Action |
 | --- | --- |
 | type | fuzzy search (fzf syntax) |
-| ↑ ↓ · Ctrl+N/P · Ctrl+J/K · Tab | move |
-| ↵ | switch to tab, focus group, restore closed tab, open bookmark or history entry in a new tab |
-| ⇧↵ on a group | expand it and collapse the other groups in that window |
-| ⌘↵ on a bookmark or history entry | open it in the current tab |
-| ⌘⌫ | close the selected tab and stay in the switcher |
+| ↑ ↓ | move |
+| ↵ | switch to the tab, open the group, reopen a closed tab, or open a bookmark / page in a new tab (the footer says which) |
+| ⇧↵ | the same in a new window (a tab or group moves there) |
 | Esc, ⌃K again, or click outside | close |
 
-**Minimal first:** only the search bar shows until you type, with a hint of where ↵ goes. **⌃K then ↵** switches to your previous tab, like alt-tab. A leading **space** (or ↓) lists every open tab, most recent first.
+The footer is just that ↵ hint and the shortcut; click the shortcut for fasttab's settings.
+
+**Minimal first:** only the search bar shows until you type. **⌃K then ↵** switches to your previous tab, like alt-tab. A leading space (or ↓) lists every open tab, most recent first.
 
 **Query syntax** follows fzf:
 
@@ -103,7 +103,7 @@ Real-browser checks, with 300 tabs in 12 groups:
 | Shortcut | ⌥K default; ⌘P when set by hand (wins over Print) | ⌥K default (`Alt+K` reported by `commands.getAll`) |
 | Popup opened to first rows | 77 ms | 11 ms |
 | Search + render per keystroke | 2–6 ms | 0.5–4.6 ms |
-| Switch, group solo (⇧↵), empty-query ↵ → previous tab | ✓ | ✓ |
+| Switch, open group, empty-query ↵ → previous tab | ✓ | ✓ |
 
 ## Development
 

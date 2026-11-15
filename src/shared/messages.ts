@@ -11,7 +11,4 @@ export type Msg =
   | { t: 'ov:history'; token: string; text: string }
   | { t: 'ov:shortcut'; token: string }
   | { t: 'ov:settings'; token: string }
-  | { t: 'ov:capture'; token: string }
-  | { t: 'ov:setup'; token: string }
-  | { t: 'ov:act'; token: string; it: ActItem; win: number; mod: boolean; shift: boolean }
-  | { t: 'ov:closeTab'; token: string; id: number };
+  | { t: 'ov:act'; token: string; it: ActItem; win: number; newWindow: boolean };

@@ -11,13 +11,34 @@ export type ActItem = Pick<RawItem, 'k' | 'id' | 'win' | 'mru' | 'col' | 'url'>;
 export const HISTORY_RECENT_DAYS = 30;
 export const HISTORY_RECENT_MAX = 1500;
 
+/** What ↵ does for each kind; shown in the switcher's footer. */
+export function actionLabel(it: Pick<RawItem, 'k' | 'n' | 'url'>): string {
+  switch (it.k) {
+    case 'tab':
+      return 'Switch to tab';
+    case 'group':
+      return 'Open group';
+    case 'closed':
+      return it.url ? 'Reopen tab' : 'Reopen window';
+    case 'bookmark':
+      return 'Open bookmark';
+    case 'history':
+      return 'Open page';
+  }
+}
+
 /**
- * Switch to / open the item. `ctxWin` is the window the switcher was opened
- * in. Returns the url to credit with a frecency visit, if any.
+ * ↵ switches to / opens the item; ⇧↵ (`newWindow`) puts it in a new window
+ * instead (a tab or group moves there). `ctxWin` is the window the switcher
+ * was opened in. Returns the url to credit with a frecency visit, if any.
  */
-export async function performAction(it: ActItem, ctxWin: number, mod: boolean, shift: boolean): Promise<string | undefined> {
+export async function performAction(it: ActItem, ctxWin: number, newWindow: boolean): Promise<string | undefined> {
   switch (it.k) {
     case 'tab': {
+      if (newWindow) {
+        await chrome.windows.create({ tabId: it.id as number, focused: true });
+        return it.url;
+      }
       const p = chrome.tabs.update(it.id as number, { active: true });
       if (it.win !== ctxWin && it.win !== undefined) await chrome.windows.update(it.win, { focused: true });
       await p;
@@ -25,23 +46,31 @@ export async function performAction(it: ActItem, ctxWin: number, mod: boolean, s
     }
     case 'group': {
       if (!hasGroups() || it.mru === undefined || it.win === undefined) return;
-      if (shift) {
-        const others = await chrome.tabGroups.query({ windowId: it.win });
-        await Promise.all(
-          others.filter((g) => g.id !== it.id && !g.collapsed).map((g) => chrome.tabGroups.update(g.id, { collapsed: true })),
-        );
+      const gid = it.id as number;
+      if (newWindow) {
+        // A new window starts with one tab; move the group in, then drop that tab.
+        const w = await chrome.windows.create({ focused: true });
+        if (w?.id === undefined) return;
+        await chrome.tabGroups.move(gid, { windowId: w.id, index: -1 });
+        const blank = w.tabs?.[0]?.id;
+        if (blank !== undefined) await chrome.tabs.remove(blank).catch(() => undefined);
+      } else if (it.win !== ctxWin) {
+        await chrome.windows.update(it.win, { focused: true });
       }
-      if (it.col) await chrome.tabGroups.update(it.id as number, { collapsed: false });
-      if (it.win !== ctxWin) await chrome.windows.update(it.win, { focused: true });
+      if (it.col) await chrome.tabGroups.update(gid, { collapsed: false });
       await chrome.tabs.update(it.mru, { active: true });
       return it.url || undefined;
     }
     case 'closed':
+      if (newWindow && it.url) {
+        await chrome.windows.create({ url: it.url, focused: true });
+        return it.url;
+      }
       await chrome.sessions?.restore(it.id as string).catch(() => undefined);
       return;
     case 'bookmark':
     case 'history':
-      if (mod) await chrome.tabs.update({ url: it.url });
+      if (newWindow) await chrome.windows.create({ url: it.url, focused: true });
       else await chrome.tabs.create({ url: it.url });
       return it.url;
   }

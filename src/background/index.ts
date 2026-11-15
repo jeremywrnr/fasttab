@@ -17,7 +17,7 @@ import {
 } from '../shared/raw.ts';
 import type { Msg } from '../shared/messages.ts';
 import { captureEnabled, SHORTCUT_KEY, syncCapture } from '../shared/capture.ts';
-import { currentShortcut, recentlyClosed, loadBookmarks, loadRecentHistory, openShortcutSettings, performAction, searchHistory } from '../shared/actions.ts';
+import { currentShortcut, recentlyClosed, loadBookmarks, loadRecentHistory, performAction, searchHistory } from '../shared/actions.ts';
 
 declare const __FIREFOX__: boolean;
 declare const __CHROME__: boolean;
@@ -247,27 +247,16 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
       case 'ov:shortcut':
         reply(await currentShortcut());
         return;
-      case 'ov:capture':
-        reply(await captureEnabled());
-        return;
-      case 'ov:setup':
-        void chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html#setup') });
-        reply(true);
-        return;
       case 'ov:settings':
-        openShortcutSettings();
+        void chrome.runtime.openOptionsPage();
         reply(true);
         return;
       case 'ov:act': {
-        const url = await performAction(msg.it, msg.win, msg.mod, msg.shift).catch(() => undefined);
+        const url = await performAction(msg.it, msg.win, msg.newWindow).catch(() => undefined);
         if (url) visit(url);
         reply(true);
         return;
       }
-      case 'ov:closeTab':
-        await chrome.tabs.remove(msg.id).catch(() => undefined);
-        reply(true);
-        return;
     }
   });
   return true; // async reply
