@@ -18,3 +18,20 @@ describe('rootDomain', () => {
     expect(hostOf('about:debugging')).toBe('');
   });
 });
+
+import { prepare, siteOf } from '../src/core/prepare.ts';
+
+describe('siteOf', () => {
+  const item = (url: string, title = 'T') => prepare({ k: 'tab', id: 1, title, url, win: 1 });
+  it('points at the domain, not a repeat of it later in the url', () => {
+    const it = item('https://app.plan.io/r?to=plan.io');
+    const [site, at] = siteOf(it);
+    expect(site).toBe('plan.io');
+    expect(it.hay.slice(at, at + site.length)).toBe('plan.io');
+    expect(at).toBe(it.uOff + 'app.'.length);
+  });
+  it('labels extension pages and keeps short forms for other schemes', () => {
+    expect(siteOf(item('moz-extension://0e54-uuid/welcome.html'))[0]).toBe('extension');
+    expect(siteOf(item('about:debugging#/runtime'))[0]).toBe('about:debugging#/runtime'.split('#')[0]);
+  });
+});

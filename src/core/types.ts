@@ -47,6 +47,8 @@ export interface Item extends RawItem {
   ord: number;
   /** query-independent rank: kind, frecency, recency, current-tab penalty */
   boost: number;
+  /** url column text and its offset in hay (lazy, see siteOf) */
+  site?: [string, number];
   /** lazily computed char classes for hay */
   cls?: Uint8Array;
 }

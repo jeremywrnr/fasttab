@@ -12,10 +12,10 @@ export const HISTORY_RECENT_DAYS = 30;
 export const HISTORY_RECENT_MAX = 1500;
 
 /** Footer labels for ↵ and ⇧↵: open tabs jump/clone, groups jump/window, the rest open/window. */
-export function actionLabels(it: Pick<RawItem, 'k'>): [string, string] {
-  if (it.k === 'tab') return ['Jump', 'Clone'];
-  if (it.k === 'group') return ['Jump', 'Window'];
-  return ['Open', 'Window'];
+export function actionLabels(it: Pick<RawItem, 'k' | 'url'>): [string, string] {
+  // A closed window has no single page to put in a new window: ⇧↵ restores it too.
+  if (it.k === 'closed' && !it.url) return ['Open', 'Open'];
+  return [it.k === 'tab' || it.k === 'group' ? 'Jump' : 'Open', it.k === 'tab' ? 'Clone' : 'Window'];
 }
 
 /**
@@ -25,22 +25,23 @@ export function actionLabels(it: Pick<RawItem, 'k'>): [string, string] {
  * credit with a frecency visit, if any.
  */
 export async function performAction(it: ActItem, ctxWin: number, alt: boolean): Promise<string | undefined> {
-  const newWindow = alt;
   switch (it.k) {
     case 'tab': {
-      if (it.win !== ctxWin && it.win !== undefined) await chrome.windows.update(it.win, { focused: true });
+      // Focusing the window and switching/cloning the tab are independent: run them together.
+      const focus = it.win !== ctxWin && it.win !== undefined ? chrome.windows.update(it.win, { focused: true }) : undefined;
       if (alt) {
-        const copy = await chrome.tabs.duplicate(it.id as number);
-        if (copy?.id !== undefined) await chrome.tabs.update(copy.id, { active: true });
+        const [, copy] = await Promise.all([focus, chrome.tabs.duplicate(it.id as number)]);
+        // Both browsers select the duplicate already; make sure where they don't.
+        if (copy?.id !== undefined && !copy.active) await chrome.tabs.update(copy.id, { active: true });
       } else {
-        await chrome.tabs.update(it.id as number, { active: true });
+        await Promise.all([focus, chrome.tabs.update(it.id as number, { active: true })]);
       }
       return it.url;
     }
     case 'group': {
       if (!hasGroups() || it.mru === undefined || it.win === undefined) return;
       const gid = it.id as number;
-      if (newWindow) {
+      if (alt) {
         // A new window starts with one tab; move the group in, then drop that tab.
         const w = await chrome.windows.create({ focused: true });
         if (w?.id === undefined) return;
@@ -55,7 +56,7 @@ export async function performAction(it: ActItem, ctxWin: number, alt: boolean): 
       return it.url || undefined;
     }
     case 'closed':
-      if (!newWindow || !it.url) {
+      if (!alt || !it.url) {
         await chrome.sessions?.restore(it.id as string).catch(() => undefined);
         return;
       }
@@ -63,7 +64,7 @@ export async function performAction(it: ActItem, ctxWin: number, alt: boolean): 
     // falls through
     case 'bookmark':
     case 'history':
-      if (newWindow) await chrome.windows.create({ url: it.url, focused: true });
+      if (alt) await chrome.windows.create({ url: it.url, focused: true });
       else await chrome.tabs.create({ url: it.url });
       return it.url;
   }
