@@ -10,5 +10,6 @@ export type Msg =
   | { t: 'ov:recent'; token: string }
   | { t: 'ov:history'; token: string; text: string }
   | { t: 'ov:shortcut'; token: string }
+  | { t: 'ov:favicons'; token: string }
   | { t: 'ov:settings'; token: string }
   | { t: 'ov:act'; token: string; it: ActItem; win: number; newWindow: boolean };

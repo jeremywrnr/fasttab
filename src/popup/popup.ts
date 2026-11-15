@@ -11,13 +11,12 @@ import { parseQuery } from '../core/query.ts';
 import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
 import type { Item, RawItem } from '../core/types.ts';
 import { actionLabel, recentlyClosed } from '../shared/actions.ts';
-import { buildRaw, FAVICONS, hasGroups, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
+import { buildRaw, FAVICONS, hasGroups, type FaviconMap, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
 import { hostOf } from '../core/text.ts';
 import { DEFAULT_SHORTCUT, prettyShortcut, shortcutMatcher } from '../shared/shortcut.ts';
 import { direct, send, viaBackground, type Backend } from './backend.ts';
-import { VList, type Row } from './vlist.ts';
+import { iconImg, setIcon, VList, type Row } from './vlist.ts';
 
-declare const __FIREFOX__: boolean;
 declare const __CHROME__: boolean;
 
 const GROUP_COLORS: Record<string, string> = {
@@ -39,8 +38,7 @@ const $inner = document.getElementById('inner')!;
 const $empty = document.getElementById('empty')!;
 const $act = document.getElementById('act')!;
 const $next = document.getElementById('next')!;
-const $nextIcon = document.getElementById('next-icon') as HTMLImageElement;
-$nextIcon.onerror = () => ($nextIcon.hidden = true);
+const $nextIcon = iconImg(document.getElementById('next-icon') as HTMLImageElement);
 const $shortcut = document.getElementById('shortcut') as HTMLAnchorElement;
 const $results = document.getElementById('results')!;
 const $panel = document.getElementById('panel')!;
@@ -62,6 +60,13 @@ let sel = 0;
 let snapV = -1;
 let fullLoaded = false;
 
+// Overlay: the frame covers the page, so a click outside the panel closes it.
+if (OVERLAY) {
+  document.addEventListener('mousedown', (e) => {
+    if (!$panel.contains(e.target as Node)) dismiss();
+  });
+}
+
 function dismiss(): void {
   if (OVERLAY) parent.postMessage({ ft: 'close' }, '*');
   else window.close();
@@ -74,7 +79,6 @@ function dismiss(): void {
 let expanded = false;
 const showList = () => expanded || $q.value.length > 0;
 
-let lastH = 0;
 function layout(): void {
   const show = showList();
   const n = count();
@@ -85,18 +89,8 @@ function layout(): void {
   const next = !$q.value && res && n ? at(res, 0) : null;
   $next.hidden = !next;
   if (next) {
-    const src = faviconFor(next);
-    $nextIcon.hidden = !src;
-    if (src && $nextIcon.getAttribute('src') !== src) $nextIcon.src = src;
+    setIcon($nextIcon, faviconFor(next));
     $next.title = next.title;
-  }
-  if (OVERLAY) {
-    // panel bottom (includes its top margin) plus its bottom margin, which holds the shadow
-    const h = Math.ceil($panel.getBoundingClientRect().bottom + parseFloat(getComputedStyle($panel).marginBottom));
-    if (h !== lastH) {
-      lastH = h;
-      parent.postMessage({ ft: 'size', h }, '*');
-    }
   }
 }
 
@@ -104,17 +98,17 @@ function layout(): void {
 
 const faviconBase = __CHROME__ ? chrome.runtime.getURL('/_favicon/') : '';
 /** Firefox/Safari: host → favicon url, collected by the background from open tabs. */
-let favicons = new Map<string, string>();
-let favVer = 0;
-function setFavicons(obj: Record<string, string> | undefined): void {
-  if (!obj) return;
-  favicons = new Map(Object.entries(obj));
-  favVer++;
+let favicons: FaviconMap = {};
+function setFavicons(map: FaviconMap | undefined): void {
+  if (!map) return;
+  favicons = map;
+  list.draw(); // rows pick the icons up outside their render signature
+  layout();
 }
 function faviconFor(it: Item): string {
   if (!it.url || it.k === 'group') return '';
   if (__CHROME__) return `${faviconBase}?pageUrl=${encodeURIComponent(it.url)}&size=32`;
-  return favicons.get(hostOf(it.url)) ?? '';
+  return favicons[hostOf(it.url)] ?? '';
 }
 
 /** Append text with <mark> runs for positions in [off, off + text.length). */
@@ -167,19 +161,18 @@ const KIND_MARK: Partial<Record<Item['k'], [string, string]>> = {
 function renderRow(row: Row, i: number): void {
   if (!res) return;
   const it = at(res, i);
-  const sig = `${it.key}|${it.ord}|${res.q.raw}|${it.title}|${it.gt}|${it.col}|${it.aud}|${favVer}`;
+  // Icon column: a group's colour, else the favicon, else nothing (the slot keeps its width).
+  // Outside the signature check because favicons can arrive after the row is drawn.
+  row.dot.hidden = setIcon(row.fav, faviconFor(it));
+  const sig = `${it.key}|${it.ord}|${res.q.raw}|${it.title}|${it.gt}|${it.col}|${it.aud}`;
   row.el.classList.toggle('sel', i === sel);
   if (row.sig === sig) return;
   row.sig = sig;
   const pos = res.q.groups.length ? positionsFor(it, res.q) : [];
-  row.el.className = 'row k-' + it.k + (i === sel ? ' sel' : '');
-  // Icon column: a group's colour, else the favicon, else nothing (the slot keeps its width).
-  let src = faviconFor(it);
-  if (src && row.fav.dataset.failed === src) src = '';
-  row.fav.hidden = !src;
-  if (src && row.fav.getAttribute('src') !== src) row.fav.src = src;
-  row.dot.className = it.k === 'group' ? 'ico dot' : 'ico';
-  row.dot.hidden = !!src;
+  const mark = KIND_MARK[it.k];
+  // "past": bookmarks, history, closed. Dimmed, grayscale favicon until selected.
+  row.el.className = 'row k-' + it.k + (mark ? ' past' : '') + (i === sel ? ' sel' : '');
+  row.dot.classList.toggle('dot', it.k === 'group');
   if (it.k === 'group') row.dot.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
   highlight(row.t, it.title, 0, pos);
   // the url as shown is already in the haystack (prepare), between uOff and the group
@@ -196,7 +189,6 @@ function renderRow(row: Row, i: number): void {
   row.badge.textContent = b;
   row.eq.hidden = !(it.k === 'tab' && it.aud);
   row.win.hidden = !(it.k === 'tab' && it.win !== s.context.win);
-  const mark = KIND_MARK[it.k];
   row.kind.hidden = !mark;
   row.kind.textContent = mark?.[0] ?? '';
   row.kind.title = mark?.[1] ?? '';
@@ -216,7 +208,8 @@ list.onHover = (i) => {
 /** Draw rows and say in the footer what ↵ does for the selected one. */
 function redraw(): void {
   list.draw();
-  $act.textContent = res && sel < count() ? actionLabel(at(res, sel)) : '';
+  const label = res && sel < count() ? actionLabel(at(res, sel)) : '';
+  if ($act.textContent !== label) $act.textContent = label;
 }
 
 function count(): number {
@@ -380,6 +373,7 @@ async function shortcutHint(): Promise<void> {
 }
 
 function afterBase(): void {
+  if (!__CHROME__) idle(() => void api.favicons().then(setFavicons));
   idle(() => void loadExtras());
   idle(() => void shortcutHint());
 }
@@ -389,14 +383,12 @@ if (overlayApi) {
   void overlayApi.init().then((r) => {
     if (!r) return;
     fullLoaded = true;
-    setFavicons(r.favicons);
     setBase(r.items, r.win);
     afterBase();
   });
 } else {
   // Stage 1 + 2 run in parallel; the small key usually resolves first.
   void chrome.storage.session.get(SNAP_TOP).then((r) => applySnapshot(r[SNAP_TOP] as Snapshot | undefined, false));
-  if (!__CHROME__) void chrome.storage.session.get(FAVICONS).then((r) => (setFavicons(r[FAVICONS] as Record<string, string>), list.draw()));
   void chrome.storage.session.get(SNAP_FULL).then((r) => {
     const sn = r[SNAP_FULL] as Snapshot | undefined;
     if (sn) applySnapshot(sn, true);
@@ -415,11 +407,10 @@ if (overlayApi) {
   // Live updates while the popup is open (tab closed elsewhere, title changes).
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'session') return;
-    if (changes[FAVICONS]) {
-      setFavicons(changes[FAVICONS].newValue as Record<string, string>);
-      list.draw();
-    }
+    // A snapshot redraws anyway; favicons are picked up by that draw.
+    if (changes[FAVICONS]) favicons = (changes[FAVICONS].newValue as FaviconMap | undefined) ?? {};
     if (changes[SNAP_FULL]) applySnapshot(changes[SNAP_FULL].newValue as Snapshot | undefined, true);
+    else if (changes[FAVICONS]) setFavicons(favicons);
   });
 }
 

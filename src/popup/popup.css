@@ -45,10 +45,14 @@ html.overlay body {
   width: 100%;
   background: transparent;
 }
-/* The frame is transparent; these margins leave room for the whole shadow
-   (blur + offset) so the frame's edge never clips it into a box. */
+/* The frame is transparent and covers the page; the panel floats in it. */
+html.overlay,
+html.overlay body {
+  height: 100%;
+}
 html.overlay .panel {
-  margin: 24px 40px 56px;
+  width: min(720px, calc(100vw - 32px));
+  margin: 16vh auto 0;
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
@@ -136,9 +140,6 @@ html.overlay .panel {
 .ico {
   display: grid;
   place-items: center;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--muted);
 }
 .ico.dot::before {
   content: '';
@@ -172,22 +173,15 @@ html.overlay .panel {
   font: 10.5px/1.5 ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: -0.2px;
 }
-/* their favicons stay grayscale until the row is selected */
-.row.k-bookmark:not(.sel) .fav,
-.row.k-history:not(.sel) .fav,
-.row.k-closed:not(.sel) .fav {
+/* "past" = bookmark, history, closed: grayscale favicon until selected */
+.row.past:not(.sel) .fav {
   filter: grayscale(1);
 }
-/* bookmarks, history, closed: the whole row recedes so open tabs read first;
-   it comes back up enough to read when selected */
-.row.k-bookmark > *,
-.row.k-history > *,
-.row.k-closed > * {
+/* "past" rows recede so open tabs read first; readable again when selected */
+.row.past > * {
   opacity: var(--dim);
 }
-.row.sel.k-bookmark > *,
-.row.sel.k-history > *,
-.row.sel.k-closed > * {
+.row.past.sel > * {
   opacity: var(--dim-sel);
 }
 .row.k-tab .t {
@@ -250,12 +244,8 @@ mark {
     transform: scaleY(0.7);
   }
 }
-/* tab in another window: tinted pill, distinct from the plain badges */
-.win {
-  flex: none;
-  font-size: 10.5px;
-  padding: 1px 7px;
-  border-radius: 9px;
+/* tab in another window: a .chip tinted with the accent */
+.chip.win {
   color: var(--sel-bar);
   background: color-mix(in srgb, var(--sel-bar) 16%, transparent);
 }

@@ -9,6 +9,7 @@ export const SNAP_TOP = 'ft_top';
 export const SNAP_FULL = 'ft_full';
 /** host → favicon url (Firefox/Safari), kept out of the snapshot and written only on change */
 export const FAVICONS = 'ft_fav';
+export type FaviconMap = Record<string, string>;
 export const TOP_N = 30;
 const UNNAMED_GROUP = 'Unnamed group';
 

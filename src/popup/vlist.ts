@@ -22,21 +22,34 @@ export interface Row {
 
 const OVERSCAN = 4;
 
+/** An <img> for favicons that remembers urls that failed, so they are not shown broken again. */
+export function iconImg(img = document.createElement('img'), onFail?: () => void): HTMLImageElement {
+  img.decoding = 'async';
+  img.alt = '';
+  img.onerror = () => {
+    img.dataset.failed = img.getAttribute('src') ?? '';
+    img.hidden = true;
+    onFail?.();
+  };
+  return img;
+}
+
+/** Show `src` in `img` (hidden when empty or known broken). Returns whether it is shown. */
+export function setIcon(img: HTMLImageElement, src: string): boolean {
+  const show = !!src && img.dataset.failed !== src;
+  img.hidden = !show;
+  if (show && img.getAttribute('src') !== src) img.src = src;
+  return show;
+}
+
 function makeRow(): Row {
   const el = document.createElement('div');
   el.className = 'row';
-  const fav = document.createElement('img');
+  // a failed favicon leaves the (empty) icon slot so columns stay aligned
+  const fav = iconImg(undefined, () => (dot.hidden = false));
   fav.className = 'fav';
-  fav.decoding = 'async';
-  fav.alt = '';
-  // missing favicon: fall back to the neutral icon so columns stay aligned
-  fav.onerror = () => {
-    fav.dataset.failed = fav.getAttribute('src') ?? '';
-    fav.hidden = true;
-    dot.hidden = false;
-  };
   const dot = document.createElement('span');
-  dot.className = 'dot';
+  dot.className = 'ico';
   const txt = document.createElement('div');
   txt.className = 'txt';
   const t = document.createElement('div');
@@ -53,7 +66,7 @@ function makeRow(): Row {
   const badge = document.createElement('span');
   badge.className = 'badge';
   const win = document.createElement('span');
-  win.className = 'win';
+  win.className = 'chip win';
   win.textContent = '⧉ other window';
   const kind = document.createElement('span');
   kind.className = 'kind';

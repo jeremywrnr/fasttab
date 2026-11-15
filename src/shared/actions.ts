@@ -51,12 +51,12 @@ export async function performAction(it: ActItem, ctxWin: number, newWindow: bool
       return it.url || undefined;
     }
     case 'closed':
-      if (newWindow && it.url) {
-        await chrome.windows.create({ url: it.url, focused: true });
-        return it.url;
+      if (!newWindow || !it.url) {
+        await chrome.sessions?.restore(it.id as string).catch(() => undefined);
+        return;
       }
-      await chrome.sessions?.restore(it.id as string).catch(() => undefined);
-      return;
+    // ⇧↵ on a closed tab: open its page in a new window, like a bookmark
+    // falls through
     case 'bookmark':
     case 'history':
       if (newWindow) await chrome.windows.create({ url: it.url, focused: true });

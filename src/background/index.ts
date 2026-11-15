@@ -11,6 +11,7 @@ import {
   buildRaw,
   FAVICONS,
   hasGroups,
+  type FaviconMap,
   SNAP_FULL,
   SNAP_TOP,
   topOf,
@@ -42,17 +43,16 @@ let ready: Promise<void> | null = null;
 
 function init(): Promise<void> {
   return (ready ??= (async () => {
-    const [all, gs, cl, store, win] = await Promise.all([
+    const [all, gs, cl, store, win, saved] = await Promise.all([
       chrome.tabs.query({}),
       hasGroups() ? chrome.tabGroups.query({}).catch(() => []) : Promise.resolve([]),
       recentlyClosed(),
       chrome.storage.local.get(FREC_KEY),
       chrome.windows.getLastFocused().catch(() => undefined),
+      chrome.storage.session.get(FAVICONS).catch(() => ({}) as Record<string, unknown>),
     ]);
-    if (!__CHROME__) {
-      const prev = (await chrome.storage.session.get(FAVICONS))[FAVICONS] as Record<string, string> | undefined;
-      for (const [h, f] of Object.entries(prev ?? {})) favicons.set(h, f);
-    }
+    // Favicons from before the worker slept (Firefox/Safari; empty on Chrome).
+    for (const [h, f] of Object.entries((saved[FAVICONS] as FaviconMap | undefined) ?? {})) favicons.set(h, f);
     for (const t of all) {
       if (t.id !== undefined) tabs.set(t.id, t);
       noteFavicon(t);
@@ -110,17 +110,22 @@ async function writeSnapshot(): Promise<void> {
 
 const favicons = new Map<string, string>();
 let favDirty = false;
-const MAX_FAVICONS = 2000;
+// Bounded: the whole map is rewritten when one icon changes, so keep it small.
+// Real favicons are a few KB; skip anything huge rather than carry it around.
+const MAX_FAVICONS = 600;
+const MAX_FAVICON_BYTES = 24_000;
 
-function noteFavicon(t: chrome.tabs.Tab): void {
-  if (__CHROME__) return;
+/** Record a tab's favicon for its site. Returns whether the map changed. */
+function noteFavicon(t: chrome.tabs.Tab): boolean {
+  if (__CHROME__) return false; // Chrome draws any page's favicon itself
   const host = hostOf(t.url ?? '');
   const f = t.favIconUrl;
-  if (!host || !f || f.length > 256_000 || favicons.get(host) === f) return;
+  if (!host || !f || f.length > MAX_FAVICON_BYTES || favicons.get(host) === f) return false;
   favicons.delete(host); // re-insert as newest
   favicons.set(host, f);
   if (favicons.size > MAX_FAVICONS) favicons.delete(favicons.keys().next().value!);
   favDirty = true;
+  return true;
 }
 
 /** Run a state change once the index is loaded, then schedule a snapshot. */
@@ -160,7 +165,7 @@ function recordActivation(tabId: number): void {
 // Listeners must be registered synchronously at top level so the worker is
 // woken for them after it has been suspended.
 
-const RELEVANT = ['title', 'url', 'pinned', 'audible', 'discarded', 'groupId', 'favIconUrl', 'mutedInfo'] as const;
+const RELEVANT = ['title', 'url', 'pinned', 'audible', 'discarded', 'groupId', 'mutedInfo'] as const;
 
 chrome.tabs.onCreated.addListener(
   on((t: chrome.tabs.Tab) => {
@@ -172,9 +177,8 @@ chrome.tabs.onCreated.addListener(
 chrome.tabs.onUpdated.addListener(
   on((id: number, change: chrome.tabs.OnUpdatedInfo, t: chrome.tabs.Tab) => {
     tabs.set(id, t);
-    noteFavicon(t);
-    if (__CHROME__ && 'favIconUrl' in change && Object.keys(change).length <= 2) return false; // Chrome draws favicons itself
-    return RELEVANT.some((k) => k in change);
+    // A new favicon only needs the (separate) favicon map written.
+    return noteFavicon(t) || RELEVANT.some((k) => k in change);
   }),
 );
 
@@ -268,7 +272,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
         return;
       case 'ov:init': {
         const win = sender.tab?.windowId ?? focusedWin;
-        reply({ items: buildItems(Date.now()), win, favicons: Object.fromEntries(favicons) });
+        reply({ items: buildItems(Date.now()), win });
         return;
       }
       case 'ov:bookmarks':
@@ -279,6 +283,9 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
         return;
       case 'ov:history':
         reply(await searchHistory(msg.text));
+        return;
+      case 'ov:favicons':
+        reply(Object.fromEntries(favicons));
         return;
       case 'ov:shortcut':
         reply(await currentShortcut());
@@ -350,19 +357,16 @@ function injectOverlay(src: string, origin: string): string {
   host.id = ID;
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;';
   const root = host.attachShadow({ mode: 'closed' });
+  // Transparent and full-viewport: the switcher positions its panel itself and
+  // treats clicks outside it as "close".
   const frame = document.createElement('iframe');
   frame.src = src;
-  frame.style.cssText =
-    // 80px wider and 24px higher than the panel: the panel's margins hold its shadow.
-    'position:absolute;left:50%;top:calc(16vh - 24px);transform:translateX(-50%);width:min(800px,100vw);height:136px;' +
-    'border:0;background:transparent;color-scheme:normal;';
+  frame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;color-scheme:normal;';
   root.appendChild(frame);
   const prev = document.activeElement as HTMLElement | null;
   const onMsg = (e: MessageEvent) => {
     if (e.origin !== origin || e.source !== frame.contentWindow) return;
-    const d = e.data as { ft?: string; h?: number };
-    if (d?.ft === 'size' && typeof d.h === 'number') frame.style.height = d.h + 'px';
-    else if (d?.ft === 'close') close();
+    if ((e.data as { ft?: string })?.ft === 'close') close();
   };
   const onVis = () => {
     if (document.hidden) close();
@@ -374,9 +378,6 @@ function injectOverlay(src: string, origin: string): string {
     prev?.focus?.();
   };
   host.addEventListener('fasttab-close', close);
-  host.addEventListener('mousedown', (e) => {
-    if (e.target === host) close();
-  });
   window.addEventListener('message', onMsg, true);
   document.addEventListener('visibilitychange', onVis);
   document.documentElement.appendChild(host);

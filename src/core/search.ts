@@ -196,11 +196,6 @@ export class Searcher {
     this.rebuild();
   }
 
-  remove(key: string): void {
-    this.base = this.base.filter((it) => it.key !== key);
-    this.rebuild();
-  }
-
   get(key: string): Item | undefined {
     return this.all.find((it) => it.key === key);
   }
