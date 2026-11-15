@@ -2,8 +2,9 @@
 # `just` lists recipes; most take an optional browser target.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load
 
-# chrome-dev host for `just run-chrome` (see dotfiles: chrome-dev --host)
+# chrome-dev host for `just run-chrome`; set it in a git-ignored .env (FASTTAB_CHROME_HOST=…)
 chrome_host := env("FASTTAB_CHROME_HOST", "")
 
 default:
