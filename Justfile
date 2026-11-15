@@ -4,7 +4,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # chrome-dev host for `just run-chrome` (see dotfiles: chrome-dev --host)
-chrome_host := env("FASTTAB_CHROME_HOST", "JWMB19")
+chrome_host := env("FASTTAB_CHROME_HOST", "")
 
 default:
     @just --list --unsorted
@@ -65,8 +65,9 @@ firefox-dev: (build "firefox")
     open -a Firefox 'about:debugging#/runtime/this-firefox'
     @echo "manifest path copied: $PWD/dist/firefox/manifest.json"
 
-# Chrome for Testing on the dev host with fasttab loaded (restarts that browser)
+# Chrome for Testing on $FASTTAB_CHROME_HOST with fasttab loaded (restarts that browser)
 run-chrome: (build "chrome")
+    @test -n "{{chrome_host}}" || { echo "set FASTTAB_CHROME_HOST to the machine running Chrome for Testing"; exit 1; }
     chrome-dev --host {{chrome_host}} --ext dist/chrome --restart
 
 # Build the Safari app and open it so Safari registers the extension

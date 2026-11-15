@@ -119,7 +119,7 @@ Run `just` to list every recipe. The main ones:
 | `just test` / `just bench` | vitest (fzf parity tests skip without `fzf`) / per-keystroke search latency |
 | `just run-firefox` | throwaway Firefox profile with fasttab, reloads on rebuild |
 | `just firefox-dev` | your own Firefox: opens `about:debugging` and copies the manifest path for Reload / Load Temporary Add-on |
-| `just run-chrome` | Chrome for Testing on `$FASTTAB_CHROME_HOST` (default JWMB19) with fasttab loaded |
+| `just run-chrome` | Chrome for Testing on `$FASTTAB_CHROME_HOST` with fasttab loaded |
 | `just run-safari` | builds the Safari app and opens it so Safari registers the extension |
 | `just harness [tabs]` | `dist/harness.js`: the real popup with a mocked browser API and fake tabs |
 | `just package` | `fasttab-chrome.zip`, `fasttab-firefox.zip`, `fasttab-safari.zip` (or `package-chrome` / `-firefox` / `-safari`) |
