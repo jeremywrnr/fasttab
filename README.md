@@ -1,6 +1,8 @@
 # fasttab
 
-A fast, keyboard-first tab switcher for Chrome and Firefox, built for hundreds or thousands of tabs across many tab groups. Inspired by [omni](https://github.com/alyssaxuu/omni). Unlike omni, it opens as the extension's own popup instead of injecting an overlay into the page, so it opens instantly, works on `chrome://` pages, and puts nothing into the pages you visit.
+A fast, keyboard-first tab switcher for Chrome and Firefox, built for hundreds or thousands of tabs across many tab groups. Inspired by [omni](https://github.com/alyssaxuu/omni) and Alfred: press **⌥K** and a single search bar floats near the top-center of the page; results appear as you type.
+
+**How it opens.** ⌥K injects a small transparent frame into the current page, only when pressed: no content script runs on pages otherwise, and the `activeTab` + `scripting` permissions carry no install-time warning. The frame is the extension's own page, so the site can't read it. Data and actions go through the background worker, and every request carries a one-time token, so a page that frames fasttab itself gets nothing. Where browsers forbid injection (new tab, `about:`/`chrome://` pages, the add-on stores) ⌥K opens the same UI as the toolbar popup.
 
 ## Install (dev)
 
@@ -27,10 +29,10 @@ You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:ad
 | ↵ | switch to tab, focus group, restore closed tab, open bookmark or history entry in a new tab |
 | ⇧↵ on a group | expand it and collapse the other groups in that window |
 | ⌘↵ on a bookmark or history entry | open it in the current tab |
-| ⌘⌫ | close the selected tab and stay in the popup |
-| Esc | close |
+| ⌘⌫ | close the selected tab and stay in the switcher |
+| Esc, ⌥K again, or click outside | close |
 
-**Opening the popup and pressing ↵** with an empty query switches to your previous tab, like alt-tab.
+**Minimal first:** only the search bar shows until you type, with a hint of where ↵ goes. **⌥K then ↵** switches to your previous tab, like alt-tab. ↓ on an empty query shows the recent-tabs list.
 
 **Query syntax** follows fzf:
 

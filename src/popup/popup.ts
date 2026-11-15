@@ -9,15 +9,22 @@
 import { parseQuery } from '../core/query.ts';
 import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
 import type { FrecMap } from '../core/frecency.ts';
+import {
+  currentShortcut,
+  loadBookmarks,
+  loadRecentHistory,
+  openShortcutSettings,
+  performAction,
+  searchHistory,
+  type ActItem,
+} from '../shared/actions.ts';
 import type { Item, RawItem } from '../core/types.ts';
 import { prettyUrl } from '../core/text.ts';
 import type { Msg } from '../shared/messages.ts';
 import {
   closedToRaw,
-  flattenBookmarks,
   groupsToRaw,
   hasGroups,
-  historyToRaw,
   SNAP_FULL,
   SNAP_TOP,
   tabToRaw,
@@ -25,6 +32,7 @@ import {
   type Snapshot,
 } from '../shared/raw.ts';
 import { VList, type Row } from './vlist.ts';
+import { shortcutMatcher } from '../shared/shortcut.ts';
 
 declare const __FIREFOX__: boolean;
 
@@ -39,8 +47,6 @@ const GROUP_COLORS: Record<string, string> = {
   cyan: '#007b83',
   orange: '#fa903e',
 };
-const HISTORY_RECENT_DAYS = 30;
-const HISTORY_RECENT_MAX = 1500;
 const HISTORY_LIVE_DEBOUNCE = 120;
 
 const $q = document.getElementById('q') as HTMLInputElement;
@@ -49,6 +55,18 @@ const $inner = document.getElementById('inner')!;
 const $empty = document.getElementById('empty')!;
 const $status = document.getElementById('status')!;
 const $shortcut = document.getElementById('shortcut') as HTMLAnchorElement;
+const $hint = document.getElementById('hint')!;
+const $results = document.getElementById('results')!;
+const $panel = document.getElementById('panel')!;
+
+// Overlay mode: loaded in a frame the background injected into a page, with a
+// one-time token in the hash. Otherwise this is the toolbar popup (or the
+// popup-window fallback).
+const TOKEN = location.hash.startsWith('#o=') ? location.hash.slice(3) : '';
+const OVERLAY = !!TOKEN;
+if (OVERLAY) document.documentElement.classList.add('overlay');
+const MAX_ROWS = 8;
+const ROW_H = 44;
 
 const s = new Searcher();
 let res: Result | null = null;
@@ -60,6 +78,43 @@ let snapWin = -1;
 let firstPaint = 0;
 
 const send = (m: Msg) => chrome.runtime.sendMessage(m).catch(() => undefined);
+
+// Overlay requests go through the background: an extension page framed in a
+// web page gets no tabs/storage API in Firefox. The background answers only
+// for a known token, so a page that frames popup.html itself gets nothing.
+type OvReq = Msg extends infer M ? (M extends { token: string } ? Omit<M, 'token'> : never) : never;
+const ov = <T>(m: OvReq): Promise<T | undefined> =>
+  chrome.runtime.sendMessage({ ...m, token: TOKEN }).then(
+    (r) => (r ?? undefined) as T | undefined,
+    () => undefined,
+  );
+
+function dismiss(): void {
+  if (OVERLAY) parent.postMessage({ ft: 'close' }, '*');
+  else window.close();
+}
+
+/** Minimal first: only the input until there is a query or ↓ is pressed. */
+let expanded = false;
+const showList = () => expanded || $q.value.trim().length > 0;
+
+let lastH = 0;
+function layout(): void {
+  const show = showList();
+  const n = count();
+  $results.hidden = !show;
+  $inner.parentElement!.style.height = n ? Math.min(n, MAX_ROWS) * ROW_H + 'px' : '';
+  $empty.hidden = n > 0 || !fullLoaded;
+  // Collapsed: hint at what Enter will do.
+  $hint.textContent = !show && res && n ? '↵ ' + at(res, 0).title : '';
+  if (OVERLAY) {
+    const h = Math.ceil($panel.getBoundingClientRect().height) + 6 + 28; // panel margins
+    if (h !== lastH) {
+      lastH = h;
+      parent.postMessage({ ft: 'size', h }, '*');
+    }
+  }
+}
 
 // ------------------------------------------------------------------ rendering
 
@@ -185,7 +240,7 @@ function refresh(keepSelection: boolean): void {
     const n = Math.min(count(), 500);
     for (let i = 0; i < n; i++) if (at(res, i).key === key) sel = i;
   }
-  $empty.hidden = count() > 0 || !fullLoaded;
+  layout();
   list.setCount(count());
   list.reveal(sel);
   list.draw();
@@ -207,6 +262,13 @@ function status(): void {
 function move(d: number): void {
   const n = count();
   if (!n) return;
+  if (!showList()) {
+    expanded = true;
+    layout();
+    list.reveal(sel);
+    list.draw();
+    return;
+  }
   sel = (sel + d + n) % n;
   list.reveal(sel);
   list.draw();
@@ -217,39 +279,21 @@ function move(d: number): void {
 async function activate(mod: boolean, shift: boolean): Promise<void> {
   if (!res || sel >= count()) return;
   const it = at(res, sel);
-  switch (it.k) {
-    case 'tab': {
-      void send({ t: 'visit', url: it.url });
-      const p = chrome.tabs.update(it.id as number, { active: true });
-      if (it.win !== s.context.win && it.win !== undefined) await chrome.windows.update(it.win, { focused: true });
-      await p;
-      break;
-    }
-    case 'group': {
-      if (!hasGroups() || it.mru === undefined || it.win === undefined) break;
-      void send({ t: 'visit', url: s.get('t:' + it.mru)?.url ?? '' });
-      if (shift) {
-        const others = await chrome.tabGroups.query({ windowId: it.win });
-        await Promise.all(
-          others.filter((g) => g.id !== it.id && !g.collapsed).map((g) => chrome.tabGroups.update(g.id, { collapsed: true })),
-        );
-      }
-      if (it.col) await chrome.tabGroups.update(it.id as number, { collapsed: false });
-      if (it.win !== s.context.win) await chrome.windows.update(it.win, { focused: true });
-      await chrome.tabs.update(it.mru, { active: true });
-      break;
-    }
-    case 'closed':
-      await chrome.sessions.restore(it.id as string).catch(() => undefined);
-      break;
-    case 'bookmark':
-    case 'history':
-      void send({ t: 'visit', url: it.url });
-      if (mod) await chrome.tabs.update({ url: it.url });
-      else await chrome.tabs.create({ url: it.url });
-      break;
+  const act: ActItem = {
+    k: it.k,
+    id: it.id,
+    win: it.win,
+    mru: it.mru,
+    col: it.col,
+    url: it.k === 'group' ? (s.get('t:' + it.mru)?.url ?? '') : it.url,
+  };
+  if (OVERLAY) {
+    await ov({ t: 'ov:act', it: act, win: s.context.win, mod, shift });
+  } else {
+    const url = await performAction(act, s.context.win, mod, shift).catch(() => undefined);
+    if (url) void send({ t: 'visit', url });
   }
-  window.close();
+  dismiss();
 }
 
 async function closeSelected(): Promise<void> {
@@ -260,7 +304,8 @@ async function closeSelected(): Promise<void> {
   refresh(false);
   sel = Math.min(sel, Math.max(0, count() - 1));
   list.draw();
-  await chrome.tabs.remove(it.id as number).catch(() => undefined);
+  if (OVERLAY) await ov({ t: 'ov:closeTab', id: it.id as number });
+  else await chrome.tabs.remove(it.id as number).catch(() => undefined);
 }
 
 // ------------------------------------------------------------------ input
@@ -277,6 +322,11 @@ $q.addEventListener('input', () => {
 });
 
 $q.addEventListener('keydown', (e) => {
+  if (toggleKey?.(e)) {
+    e.preventDefault();
+    dismiss();
+    return;
+  }
   const ctrl = e.ctrlKey && !e.metaKey && !e.altKey;
   const k = e.key;
   if (k === 'ArrowDown' || (ctrl && (k === 'n' || k === 'j')) || (k === 'Tab' && !e.shiftKey)) move(1);
@@ -292,7 +342,7 @@ $q.addEventListener('keydown', (e) => {
     }
     void activate(e.metaKey || e.ctrlKey, e.shiftKey);
   } else if (k === 'Backspace' && (e.metaKey || e.ctrlKey)) void closeSelected();
-  else if (k === 'Escape') window.close();
+  else if (k === 'Escape') dismiss();
   else return;
   e.preventDefault();
 });
@@ -336,18 +386,17 @@ const idle = (fn: () => void) =>
   'requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 300 }) : setTimeout(fn, 50);
 
 async function loadExtras(): Promise<void> {
-  const now = Date.now();
-  const [tree, store] = await Promise.all([
-    chrome.bookmarks.getTree().catch(() => []),
-    chrome.storage.local.get('ft_frec').catch(() => ({}) as Record<string, unknown>),
-  ]);
-  s.setBookmarks(flattenBookmarks(tree, (store.ft_frec as FrecMap | undefined) ?? {}, now));
+  const bookmarks = OVERLAY
+    ? await ov<RawItem[]>({ t: 'ov:bookmarks' })
+    : await chrome.storage.local
+        .get('ft_frec')
+        .catch(() => ({}) as Record<string, unknown>)
+        .then((st) => loadBookmarks((st.ft_frec as FrecMap | undefined) ?? {}));
+  s.setBookmarks(bookmarks ?? []);
   refresh(true);
   idle(async () => {
-    const hist = await chrome.history
-      .search({ text: '', startTime: now - HISTORY_RECENT_DAYS * 864e5, maxResults: HISTORY_RECENT_MAX })
-      .catch(() => []);
-    s.addHistory(historyToRaw(hist, now));
+    const hist = OVERLAY ? await ov<RawItem[]>({ t: 'ov:recent' }) : await loadRecentHistory();
+    s.addHistory(hist ?? []);
     refresh(true);
   });
 }
@@ -358,49 +407,71 @@ function liveHistory(): void {
   const q = parseQuery($q.value);
   if (q.plain.length < 2 || (q.scope !== '' && q.scope !== 'h')) return;
   histTimer = setTimeout(async () => {
-    const hist = await chrome.history.search({ text: q.plain, startTime: 0, maxResults: 100 }).catch(() => []);
-    if (!hist.length || parseQuery($q.value).plain !== q.plain) return;
-    s.addHistory(historyToRaw(hist, Date.now()));
+    const hist = OVERLAY ? await ov<RawItem[]>({ t: 'ov:history', text: q.plain }) : await searchHistory(q.plain);
+    if (!hist?.length || parseQuery($q.value).plain !== q.plain) return;
+    s.addHistory(hist);
     refresh(true);
   }, HISTORY_LIVE_DEBOUNCE);
 }
 
+// Firefox does not run extension shortcuts while focus is inside the
+// extension's own frame or popup, so pressing the shortcut again would just
+// type a character. Recognize it here and close, like a toggle.
+let toggleKey: ((e: KeyboardEvent) => boolean) | null = null;
+
 async function shortcutHint(): Promise<void> {
-  const cmds = await chrome.commands.getAll().catch(() => []);
-  const sc = cmds.find((c) => c.name === '_execute_action')?.shortcut;
+  const sc = OVERLAY ? await ov<string>({ t: 'ov:shortcut' }) : await currentShortcut();
+  if (__FIREFOX__) toggleKey = shortcutMatcher(sc || 'Alt+K');
   $shortcut.hidden = false;
-  $shortcut.textContent = sc ? sc : 'shortcut';
+  $shortcut.textContent = sc || 'shortcut';
   $shortcut.title = 'Change the fasttab shortcut';
   $shortcut.onclick = (e) => {
     e.preventDefault();
-    const open = (chrome.commands as { openShortcutSettings?: () => Promise<void> }).openShortcutSettings;
-    if (open) void open();
-    else void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
-    window.close();
+    if (OVERLAY) void ov({ t: 'ov:settings' });
+    else openShortcutSettings();
+    dismiss();
   };
 }
 
-// Stage 1 + 2 run in parallel; the small key usually resolves first.
-void chrome.storage.session.get(SNAP_TOP).then((r) => applySnapshot(r[SNAP_TOP] as Snapshot | undefined, false));
-void chrome.storage.session.get(SNAP_FULL).then((r) => {
-  const sn = r[SNAP_FULL] as Snapshot | undefined;
-  if (sn) applySnapshot(sn, true);
-  else void liveFallback();
+function afterBase(): void {
   idle(() => void loadExtras());
   idle(() => void shortcutHint());
-});
-void send({ t: 'hello' });
-// The snapshot's focused window is almost always the popup's; confirm it.
-void chrome.windows.getCurrent().then((w) => {
-  if (w.id === undefined || w.id === popupWin) return;
-  popupWin = w.id;
-  if (baseItems.length && popupWin !== s.context.win) setBase(baseItems);
-});
+}
 
-// Live updates while the popup is open (tab closed elsewhere, title changes).
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'session' || !changes[SNAP_FULL]) return;
-  applySnapshot(changes[SNAP_FULL].newValue as Snapshot | undefined, true);
-});
+if (OVERLAY) {
+  // One round trip: the background already holds the live index.
+  void ov<{ items: RawItem[]; win: number }>({ t: 'ov:init' }).then((r) => {
+    if (!r) return;
+    popupWin = snapWin = r.win;
+    fullLoaded = true;
+    setBase(r.items);
+    afterBase();
+  });
+} else {
+  // Stage 1 + 2 run in parallel; the small key usually resolves first.
+  void chrome.storage.session.get(SNAP_TOP).then((r) => applySnapshot(r[SNAP_TOP] as Snapshot | undefined, false));
+  void chrome.storage.session.get(SNAP_FULL).then((r) => {
+    const sn = r[SNAP_FULL] as Snapshot | undefined;
+    if (sn) applySnapshot(sn, true);
+    else void liveFallback();
+    afterBase();
+  });
+  void send({ t: 'hello' });
+  // The snapshot's focused window is almost always the popup's; confirm it.
+  void chrome.windows.getCurrent().then((w) => {
+    // The popup-window fallback lives in its own window; act on the browser window behind it.
+    if (w.id === undefined || w.id === popupWin || w.type === 'popup') return;
+    popupWin = w.id;
+    if (baseItems.length && popupWin !== s.context.win) setBase(baseItems);
+  });
+  // Live updates while the popup is open (tab closed elsewhere, title changes).
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'session' || !changes[SNAP_FULL]) return;
+    applySnapshot(changes[SNAP_FULL].newValue as Snapshot | undefined, true);
+  });
+}
 
+// The overlay frame gets focus from the page after it loads; hand it to the input.
+window.addEventListener('focus', () => $q.focus());
+window.focus();
 $q.focus();

@@ -1,5 +1,14 @@
+import type { ActItem } from './actions.ts';
+
 export type Msg =
   | { t: 'hello' }
   | { t: 'visit'; url: string }
-  | { t: 'focusGroup'; gid: number; tabId: number; win: number; solo: boolean }
-  | { t: 'restore'; sessionId: string };
+  // Overlay frame → background. Every request carries the overlay's one-time token.
+  | { t: 'ov:init'; token: string }
+  | { t: 'ov:bookmarks'; token: string }
+  | { t: 'ov:recent'; token: string }
+  | { t: 'ov:history'; token: string; text: string }
+  | { t: 'ov:shortcut'; token: string }
+  | { t: 'ov:settings'; token: string }
+  | { t: 'ov:act'; token: string; it: ActItem; win: number; mod: boolean; shift: boolean }
+  | { t: 'ov:closeTab'; token: string; id: number };

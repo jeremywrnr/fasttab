@@ -22,7 +22,7 @@ for (const s of steps) {
 
 async function check(): Promise<void> {
   const cmds = await chrome.commands.getAll();
-  const sc = cmds.find((c) => c.name === '_execute_action')?.shortcut ?? '';
+  const sc = cmds.find((c) => c.name === 'open-switcher')?.shortcut ?? '';
   $current.textContent = sc || '⌥K (default)';
   $ok.hidden = !sc;
 }

@@ -17,6 +17,7 @@ import {
   type Snapshot,
 } from '../shared/raw.ts';
 import type { Msg } from '../shared/messages.ts';
+import { currentShortcut, loadBookmarks, loadRecentHistory, openShortcutSettings, performAction, searchHistory } from '../shared/actions.ts';
 
 declare const __FIREFOX__: boolean;
 
@@ -211,7 +212,11 @@ chrome.sessions.onChanged.addListener(
   }),
 );
 
-chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
+chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
+  if (msg.t.startsWith('ov:') && !overlayTokens.has((msg as { token: string }).token)) {
+    reply(null); // unknown frame: no data, no actions
+    return false;
+  }
   void init().then(async () => {
     switch (msg.t) {
       case 'hello':
@@ -220,17 +225,38 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
         reply({ v: seq });
         return;
       case 'visit':
-        bump(frec, msg.url, Date.now(), 2);
-        saveFrec();
-        schedule();
+        visit(msg.url);
         reply(true);
         return;
-      case 'focusGroup':
-        await focusGroup(msg.gid, msg.tabId, msg.win, msg.solo);
+      case 'ov:init': {
+        const win = sender.tab?.windowId ?? focusedWin;
+        reply({ items: buildItems(Date.now()), win });
+        return;
+      }
+      case 'ov:bookmarks':
+        reply(await loadBookmarks(frec));
+        return;
+      case 'ov:recent':
+        reply(await loadRecentHistory());
+        return;
+      case 'ov:history':
+        reply(await searchHistory(msg.text));
+        return;
+      case 'ov:shortcut':
+        reply(await currentShortcut());
+        return;
+      case 'ov:settings':
+        openShortcutSettings();
         reply(true);
         return;
-      case 'restore':
-        await chrome.sessions.restore(msg.sessionId).catch(() => undefined);
+      case 'ov:act': {
+        const url = await performAction(msg.it, msg.win, msg.mod, msg.shift).catch(() => undefined);
+        if (url) visit(url);
+        reply(true);
+        return;
+      }
+      case 'ov:closeTab':
+        await chrome.tabs.remove(msg.id).catch(() => undefined);
         reply(true);
         return;
     }
@@ -238,21 +264,112 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
   return true; // async reply
 });
 
+function visit(url: string): void {
+  bump(frec, url, Date.now(), 2);
+  saveFrec();
+  schedule();
+}
+
 chrome.runtime.onStartup.addListener(() => void init());
 chrome.runtime.onInstalled.addListener(() => void init());
 void init();
 
-// ------------------------------------------------------------------ actions
+// ------------------------------------------------------------------ overlay
+// ⌥K injects a centered frame (Alfred-style) into the current page. Pages an
+// extension may not script (browser UI pages, new tab, add-on stores) get the
+// toolbar popup instead. Each overlay carries a one-time token so a web page
+// that frames popup.html on its own cannot drive it.
 
-async function focusGroup(gid: number, tabId: number, win: number, solo: boolean): Promise<void> {
-  if (!hasGroups()) return;
-  if (solo) {
-    const others = await chrome.tabGroups.query({ windowId: win });
-    await Promise.all(
-      others.filter((g) => g.id !== gid && !g.collapsed).map((g) => chrome.tabGroups.update(g.id, { collapsed: true })),
-    );
+const overlayTokens = new Set<string>();
+
+const RESTRICTED_HOSTS = new Set([
+  'chromewebstore.google.com',
+  'chrome.google.com',
+  'addons.mozilla.org',
+  'accounts.firefox.com',
+  'support.mozilla.org',
+]);
+
+function injectable(url: string | undefined): boolean {
+  if (!url || !/^https?:/.test(url)) return false;
+  try {
+    return !RESTRICTED_HOSTS.has(new URL(url).hostname);
+  } catch {
+    return false;
   }
-  await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => undefined);
-  await chrome.tabs.update(tabId, { active: true });
-  await chrome.windows.update(win, { focused: true });
 }
+
+/** Runs in the page (must be self-contained). Toggles the overlay. */
+function injectOverlay(src: string, origin: string): string {
+  const ID = '__fasttab_overlay__';
+  const old = document.getElementById(ID);
+  if (old) {
+    // An event, not an expando: each injection may run in a fresh script world.
+    old.dispatchEvent(new Event('fasttab-close'));
+    return 'closed';
+  }
+  const host = document.createElement('div');
+  host.id = ID;
+  host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;';
+  const root = host.attachShadow({ mode: 'closed' });
+  const frame = document.createElement('iframe');
+  frame.src = src;
+  frame.style.cssText =
+    'position:absolute;left:50%;top:16vh;transform:translateX(-50%);width:min(720px,calc(100vw - 16px));height:92px;' +
+    'border:0;background:transparent;color-scheme:normal;';
+  root.appendChild(frame);
+  const prev = document.activeElement as HTMLElement | null;
+  const onMsg = (e: MessageEvent) => {
+    if (e.origin !== origin || e.source !== frame.contentWindow) return;
+    const d = e.data as { ft?: string; h?: number };
+    if (d?.ft === 'size' && typeof d.h === 'number') frame.style.height = d.h + 'px';
+    else if (d?.ft === 'close') close();
+  };
+  const onVis = () => {
+    if (document.hidden) close();
+  };
+  const close = () => {
+    host.remove();
+    window.removeEventListener('message', onMsg, true);
+    document.removeEventListener('visibilitychange', onVis);
+    prev?.focus?.();
+  };
+  host.addEventListener('fasttab-close', close);
+  host.addEventListener('mousedown', (e) => {
+    if (e.target === host) close();
+  });
+  window.addEventListener('message', onMsg, true);
+  document.addEventListener('visibilitychange', onVis);
+  document.documentElement.appendChild(host);
+  frame.addEventListener('load', () => frame.focus());
+  return 'opened';
+}
+
+async function popupWindowFallback(): Promise<void> {
+  const w = await chrome.windows.getLastFocused().catch(() => undefined);
+  const width = 720;
+  const height = 520;
+  const left = w?.left !== undefined && w.width ? Math.round(w.left + (w.width - width) / 2) : undefined;
+  const top = w?.top !== undefined && w.height ? Math.round(w.top + w.height * 0.15) : undefined;
+  await chrome.windows.create({ url: chrome.runtime.getURL('popup.html'), type: 'popup', width, height, left, top });
+}
+
+chrome.commands.onCommand.addListener((cmd, tab) => {
+  if (cmd !== 'open-switcher') return;
+  if (!tab?.id || !injectable(tab.url)) {
+    // Must stay synchronous: openPopup needs the shortcut's user action.
+    chrome.action.openPopup().catch(() => void popupWindowFallback());
+    return;
+  }
+  const token = crypto.randomUUID();
+  overlayTokens.add(token);
+  setTimeout(() => overlayTokens.delete(token), 30 * 60_000);
+  const src = chrome.runtime.getURL('popup.html') + '#o=' + token;
+  const origin = new URL(chrome.runtime.getURL('')).origin;
+  chrome.scripting
+    .executeScript({ target: { tabId: tab.id }, func: injectOverlay, args: [src, origin] })
+    .catch(() => {
+      overlayTokens.delete(token);
+      return popupWindowFallback();
+    });
+});

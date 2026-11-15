@@ -17,7 +17,7 @@ function manifest(target) {
   if (target === 'chrome') {
     m.background = { service_worker: 'background.js' };
     m.permissions.push('favicon');
-    m.minimum_chrome_version = '121';
+    m.minimum_chrome_version = '127'; // action.openPopup()
   } else {
     m.background = { scripts: ['background.js'] };
     m.browser_specific_settings = {
