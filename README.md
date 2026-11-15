@@ -2,6 +2,8 @@
 
 A fast, keyboard-first tab switcher for Chrome and Firefox, built for hundreds or thousands of tabs across many tab groups. Inspired by [omni](https://github.com/alyssaxuu/omni) and Alfred: press **⌃K** (Control-K; Alt+K on Windows/Linux) and a single search bar floats near the top-center of the page; results appear as you type.
 
+![fasttab over a page: "ta" matches MDN tabs in an "extension docs" group, GitHub repos in "prior art", and dimmed bookmarks](docs/screenshot.png)
+
 **How it opens.** The shortcut injects a small transparent frame into the current page, only when pressed: no content script runs on pages otherwise, and the `activeTab` + `scripting` permissions carry no install-time warning. The frame is the extension's own page, so the site can't read it. Data and actions go through the background worker, and every request carries a one-time token, so a page that frames fasttab itself gets nothing. Where browsers forbid injection (new tab, `about:`/`chrome://` pages, the add-on stores) it opens the same UI as the toolbar popup.
 
 ## Install
