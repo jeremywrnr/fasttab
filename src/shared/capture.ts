@@ -7,8 +7,6 @@ export const SHORTCUT_KEY = 'ft_shortcut';
 const SCRIPT_ID = 'ft-hotkey';
 export const ALL_SITES = { origins: ['<all_urls>'] };
 
-export const DEFAULT_SHORTCUT = () => (navigator.platform.startsWith('Mac') ? 'MacCtrl+K' : 'Alt+K');
-
 export function captureEnabled(): Promise<boolean> {
   return chrome.permissions.contains(ALL_SITES).catch(() => false);
 }

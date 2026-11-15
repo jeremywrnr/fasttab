@@ -24,7 +24,7 @@ function tabs(): RawItem[] {
 function searcher() {
   const s = new Searcher();
   s.setBase(tabs());
-  s.setCtx({ win: 1, cur: 't:1' });
+  s.setWin(1); // tab 1 is active in window 1, so it is the current tab
   return s;
 }
 

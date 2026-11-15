@@ -43,6 +43,8 @@ export interface Item extends RawItem {
   uOff: number;
   /** offset of the group portion in hay; -1 when there is none */
   gOff: number;
+  /** normalized url (no #fragment / trailing slash) for dedupe; '' when none */
+  nu: string;
   /** position in the searcher's item list; final tiebreak */
   ord: number;
   /** query-independent rank: kind, frecency, recency, current-tab penalty */

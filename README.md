@@ -91,8 +91,8 @@ These were measured on an M-series Mac with Node 24, typing queries one characte
 | Items | Index build | p50 per keystroke | p99 per keystroke |
 | --- | --- | --- | --- |
 | 1,000 | 2 ms | 0.1 ms | 0.35 ms |
-| 5,000 | 3 ms | 0.5 ms | 2.2 ms |
-| 20,000 | 18 ms | 1.9 ms | 9.4 ms |
+| 5,000 | 3 ms | 0.4 ms | 1.7 ms |
+| 20,000 | 13 ms | 1.9 ms | 7.8 ms |
 
 In Chrome 156 with 2,000 tabs in 30 groups, search plus render took 2–6 ms per keystroke. That run used the real popup with mocked APIs, via `scripts/harness.mjs`.
 

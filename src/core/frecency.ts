@@ -8,6 +8,9 @@ export interface Frec {
 
 export type FrecMap = Record<string, Frec>;
 
+/** storage.local key; the background owns writes. */
+export const FREC_KEY = 'ft_frec';
+
 export const HALF_LIFE_MS = 3 * 24 * 3600 * 1000;
 export const MAX_ENTRIES = 5000;
 

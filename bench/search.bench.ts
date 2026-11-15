@@ -24,7 +24,8 @@ for (const n of [1000, 5000, 20000]) {
   let t = performance.now();
   const s = new Searcher();
   s.setBase(raws);
-  s.setCtx({ win: 0, cur: 't:0' });
+  let w = 0;
+  s.setWin(w);
   const indexMs = performance.now() - t;
 
   // warm up JIT
@@ -34,14 +35,14 @@ for (const n of [1000, 5000, 20000]) {
   const cold: number[] = [];
   for (let rep = 0; rep < 5; rep++) {
     for (const q of QUERIES) {
-      s.setCtx({ win: rep, cur: q }); // drop caches between queries without reallocating
+      s.setWin(++w); // drop caches between queries without reallocating
       for (let i = 1; i <= q.length; i++) {
         t = performance.now();
         s.search(q.slice(0, i));
         typed.push(performance.now() - t);
       }
       for (let i = 1; i <= q.length; i++) {
-        s.setCtx({ win: -i, cur: q }); // full scan: no narrowing, no LRU
+        s.setWin(++w); // full scan: no narrowing, no LRU
         t = performance.now();
         s.search(q.slice(0, i));
         cold.push(performance.now() - t);

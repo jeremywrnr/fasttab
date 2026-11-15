@@ -4,29 +4,17 @@
 // suggested key is active, so the shortcut card always offers the settings link.
 
 import { captureEnabled, disableCapture, requestCapture } from '../shared/capture.ts';
-import { openShortcutSettings } from '../shared/actions.ts';
+import { currentShortcut, openShortcutSettings } from '../shared/actions.ts';
+import { prettyShortcut } from '../shared/shortcut.ts';
 
 declare const __FIREFOX__: boolean;
 declare const __SAFARI__: boolean;
 
-const mac = navigator.platform.startsWith('Mac');
-const DEFAULT = mac ? '⌃K' : 'Alt+K';
+const DEFAULT = prettyShortcut('');
 const $ = (id: string) => document.getElementById(id)!;
 
-function pretty(sc: string): string {
-  if (!mac || !sc) return sc;
-  return sc
-    .replace(/MacCtrl\+/g, '⌃')
-    .replace(/Ctrl\+/g, '⌃')
-    .replace(/Alt\+/g, '⌥')
-    .replace(/Shift\+/g, '⇧')
-    .replace(/Command\+/g, '⌘');
-}
-
-let shown = DEFAULT;
 function showKey(sc: string): void {
-  shown = pretty(sc) || DEFAULT;
-  for (const el of document.querySelectorAll('#key, #key2, .k')) el.textContent = shown;
+  for (const el of document.querySelectorAll('#key, #key2, .k')) el.textContent = prettyShortcut(sc);
 }
 
 $('why').textContent = `The default is ${DEFAULT}. If another extension already holds it or you'd like a different key, change it in the browser's shortcut settings:`;
@@ -42,9 +30,8 @@ for (const s of steps) {
 }
 
 async function check(): Promise<void> {
-  const cmds = await chrome.commands.getAll();
-  const sc = cmds.find((c) => c.name === 'open-switcher')?.shortcut ?? '';
-  $('current').textContent = pretty(sc) || 'none';
+  const sc = await currentShortcut();
+  $('current').textContent = sc ? prettyShortcut(sc) : 'none';
   $('ok').hidden = !sc;
   showKey(sc);
   if (__FIREFOX__) {

@@ -129,19 +129,22 @@ export function fuzzyMatch(t: string, cls: Uint8Array, pat: string, pos: number[
   }
 
   // Phase 3: fill the score matrix, row per pattern char, from F[i] to last.
+  // Scoring only needs the previous row, so without positions two rows
+  // alternate; the full M×width matrix is kept only for the backtrace.
   const f0 = F[0];
   const width = last - f0 + 1;
-  ensureMatrix(M * width);
+  const full = pos !== null;
+  ensureMatrix(full ? M * width : 2 * width);
   for (let j = 0; j < width; j++) {
     H[j] = H0[f0 + j];
     C[j] = C0[f0 + j];
   }
-  const lastRow = (M - 1) * width;
   for (let i = 1; i < M; i++) {
     const f = F[i];
     const pch = pat.charCodeAt(i);
-    const row = i * width;
-    const prow = row - width;
+    const row = full ? i * width : (i & 1) * width;
+    const prow = full ? row - width : ((i - 1) & 1) * width;
+    const isLast = i === M - 1;
     H.fill(0, row, row + f - f0);
     C.fill(0, row, row + f - f0);
     inGap = false;
@@ -169,7 +172,7 @@ export function fuzzyMatch(t: string, cls: Uint8Array, pat: string, pos: number[
       C[row + j0] = consec;
       inGap = s1 < s2;
       const score = s1 > s2 ? (s1 > 0 ? s1 : 0) : s2 > 0 ? s2 : 0;
-      if (row === lastRow && score > maxScore) {
+      if (isLast && score > maxScore) {
         maxScore = score;
         maxPos = col;
       }

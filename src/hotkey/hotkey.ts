@@ -3,8 +3,8 @@
 // ever seeing it. Registered at document_start in every frame, so this
 // capture listener runs before the page's own handlers.
 
-import { shortcutMatcher } from '../shared/shortcut.ts';
-import { DEFAULT_SHORTCUT, SHORTCUT_KEY } from '../shared/capture.ts';
+import { DEFAULT_SHORTCUT, shortcutMatcher } from '../shared/shortcut.ts';
+import { SHORTCUT_KEY } from '../shared/capture.ts';
 
 const w = window as Window & { __fasttabHotkey?: true };
 if (!w.__fasttabHotkey) {

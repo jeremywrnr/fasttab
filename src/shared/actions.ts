@@ -1,7 +1,8 @@
 // Browser-side effects shared by the toolbar popup (calls directly) and the
 // background (runs them for the in-page overlay, whose frame has no tabs API).
 
-import type { FrecMap } from '../core/frecency.ts';
+import { FREC_KEY, type FrecMap } from '../core/frecency.ts';
+import { COMMAND } from './shortcut.ts';
 import type { RawItem } from '../core/types.ts';
 import { flattenBookmarks, hasGroups, historyToRaw } from './raw.ts';
 
@@ -46,10 +47,14 @@ export async function performAction(it: ActItem, ctxWin: number, mod: boolean, s
   }
 }
 
-export async function loadBookmarks(frec: FrecMap): Promise<RawItem[]> {
+/** `frec` defaults to the stored map (the background passes its live copy). */
+export async function loadBookmarks(frec?: FrecMap): Promise<RawItem[]> {
   if (!chrome.bookmarks) return []; // Safari
-  const tree = await chrome.bookmarks.getTree().catch(() => []);
-  return flattenBookmarks(tree, frec, Date.now());
+  const [tree, map] = await Promise.all([
+    chrome.bookmarks.getTree().catch(() => []),
+    frec ?? chrome.storage.local.get(FREC_KEY).then((st) => (st[FREC_KEY] as FrecMap | undefined) ?? {}, () => ({})),
+  ]);
+  return flattenBookmarks(tree, map, Date.now());
 }
 
 export async function loadRecentHistory(): Promise<RawItem[]> {
@@ -69,7 +74,7 @@ export async function searchHistory(text: string): Promise<RawItem[]> {
 
 export async function currentShortcut(): Promise<string> {
   const cmds = await chrome.commands.getAll().catch(() => []);
-  return cmds.find((c) => c.name === 'open-switcher')?.shortcut ?? '';
+  return cmds.find((c) => c.name === COMMAND)?.shortcut ?? '';
 }
 
 export function openShortcutSettings(): void {

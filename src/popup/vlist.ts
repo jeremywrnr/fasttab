@@ -49,7 +49,7 @@ function makeRow(): Row {
 export class VList {
   private rows: Row[] = [];
   private count = 0;
-  private rowH: number;
+  readonly rowH: number;
   private scheduled = 0;
   onHover: ((i: number) => void) | null = null;
 
@@ -59,7 +59,7 @@ export class VList {
     private render: (row: Row, i: number) => void,
     onClick: (i: number, e: MouseEvent) => void,
   ) {
-    this.rowH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')) || 44;
+    this.rowH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')) || 32;
     scroller.addEventListener(
       'scroll',
       () => {

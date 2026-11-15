@@ -8,16 +8,18 @@ import type { RawItem } from '../core/types.ts';
 export const SNAP_TOP = 'ft_top';
 export const SNAP_FULL = 'ft_full';
 export const TOP_N = 30;
+const UNNAMED_GROUP = 'Unnamed group';
 
 export interface Snapshot {
   v: number;
-  at: number;
   /** last focused normal window */
   win: number;
   items: RawItem[];
 }
 
 export type GroupInfo = { title?: string; color?: string; collapsed?: boolean; windowId?: number; id: number };
+
+declare const __CHROME__: boolean;
 
 export const hasGroups = (): boolean => typeof chrome !== 'undefined' && !!chrome.tabGroups;
 
@@ -34,7 +36,6 @@ export function tabToRaw(
   frec: FrecMap,
   now: number,
   la: number | undefined,
-  withFav: boolean,
 ): RawItem {
   const url = t.url || t.pendingUrl || '';
   const r: RawItem = { k: 'tab', id: t.id!, title: t.title || url, url, win: t.windowId };
@@ -42,7 +43,7 @@ export function tabToRaw(
   if (gid >= 0) {
     const g = groups.get(gid);
     r.gid = gid;
-    r.gt = g?.title || 'Unnamed group';
+    r.gt = g?.title || UNNAMED_GROUP;
     if (g?.color) r.gc = g.color;
   }
   if (t.active) r.act = 1;
@@ -53,7 +54,8 @@ export function tabToRaw(
   if (last) r.la = Math.round(last);
   const fr = lookup(frec, url, now);
   if (fr > 0.05) r.fr = Math.round(fr * 100) / 100;
-  if (withFav) {
+  // Chrome draws favicons itself (_favicon); Firefox/Safari need the tab's own url.
+  if (!__CHROME__) {
     const f = favOf(t.favIconUrl);
     if (f) r.fav = f;
   }
@@ -79,7 +81,7 @@ export function groupsToRaw(groups: Map<number, GroupInfo>, tabs: RawItem[]): Ra
     const r: RawItem = {
       k: 'group',
       id: g.id,
-      title: g.title || 'Unnamed group',
+      title: g.title || UNNAMED_GROUP,
       url: '',
       win: g.windowId,
       n: a.n,
@@ -164,4 +166,18 @@ export function topOf(items: RawItem[], win: number, n = TOP_N): RawItem[] {
       return ca - cb || (b.la ?? 0) - (a.la ?? 0);
     })
     .slice(0, n);
+}
+
+/** Every snapshot item: tabs, then their groups, then recently closed. */
+export function buildRaw(
+  tabs: Iterable<chrome.tabs.Tab>,
+  groups: Map<number, GroupInfo>,
+  closed: chrome.sessions.Session[],
+  frec: FrecMap,
+  now: number,
+  lastAct?: Map<number, number>,
+): RawItem[] {
+  const tabItems: RawItem[] = [];
+  for (const t of tabs) if (t.id !== undefined) tabItems.push(tabToRaw(t, groups, frec, now, lastAct?.get(t.id)));
+  return tabItems.concat(groupsToRaw(groups, tabItems), closedToRaw(closed));
 }

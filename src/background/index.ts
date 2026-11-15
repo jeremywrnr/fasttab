@@ -3,15 +3,14 @@
 // storage.session so the popup can paint without waiting on this worker.
 // Also records frecency (tab activations with a dwell, plus popup picks).
 
-import { bump, prune, type FrecMap } from '../core/frecency.ts';
+import { bump, FREC_KEY, prune, type FrecMap } from '../core/frecency.ts';
+import { COMMAND } from '../shared/shortcut.ts';
 import type { RawItem } from '../core/types.ts';
 import {
-  closedToRaw,
-  groupsToRaw,
+  buildRaw,
   hasGroups,
   SNAP_FULL,
   SNAP_TOP,
-  tabToRaw,
   topOf,
   type GroupInfo,
   type Snapshot,
@@ -23,7 +22,6 @@ import { currentShortcut, recentlyClosed, loadBookmarks, loadRecentHistory, open
 declare const __FIREFOX__: boolean;
 declare const __CHROME__: boolean;
 
-const FREC_KEY = 'ft_frec';
 const DWELL_MS = 1000;
 const SNAP_DEBOUNCE = 100;
 const SNAP_MAX_WAIT = 400;
@@ -54,7 +52,9 @@ function init(): Promise<void> {
     closed = cl;
     frec = (store[FREC_KEY] as FrecMap | undefined) ?? {};
     if (win?.id !== undefined) focusedWin = win.id;
-    await writeSnapshot();
+    // Debounced like any change: the event that woke the worker schedules one too,
+    // and a popup that is waiting flushes it with 'hello'.
+    schedule();
   })());
 }
 
@@ -75,12 +75,7 @@ function schedule(): void {
 }
 
 function buildItems(now: number): RawItem[] {
-  const tabItems: RawItem[] = [];
-  for (const t of tabs.values()) {
-    if (t.id === undefined) continue;
-    tabItems.push(tabToRaw(t, groups, frec, now, lastAct.get(t.id), !__CHROME__));
-  }
-  return tabItems.concat(groupsToRaw(groups, tabItems), closedToRaw(closed));
+  return buildRaw(tabs.values(), groups, closed, frec, now, lastAct);
 }
 
 async function writeSnapshot(): Promise<void> {
@@ -89,8 +84,8 @@ async function writeSnapshot(): Promise<void> {
   const now = Date.now();
   const items = buildItems(now);
   const v = ++seq;
-  const full: Snapshot = { v, at: now, win: focusedWin, items };
-  const top: Snapshot = { v, at: now, win: focusedWin, items: topOf(items, focusedWin) };
+  const full: Snapshot = { v, win: focusedWin, items };
+  const top: Snapshot = { v, win: focusedWin, items: topOf(items, focusedWin) };
   await chrome.storage.session.set({ [SNAP_TOP]: top, [SNAP_FULL]: full });
 }
 
@@ -373,7 +368,7 @@ async function popupWindowFallback(): Promise<void> {
 }
 
 chrome.commands.onCommand.addListener((cmd, tab) => {
-  if (cmd === 'open-switcher') openSwitcher(tab);
+  if (cmd === COMMAND) openSwitcher(tab);
 });
 
 function openSwitcher(tab: chrome.tabs.Tab | undefined): void {

@@ -1,13 +1,12 @@
 import { exactMatch, fuzzyMatch, scoreRange } from './fzf.ts';
-import { normUrl } from './frecency.ts';
-import { clsOf, prepare, SEP } from './prepare.ts';
-import { canNarrow, parseQuery, type Query, type Term } from './query.ts';
+import { clsOf, keyOf, prepare, reusePrepared, SEP } from './prepare.ts';
+import { canNarrow, parseQuery, type Query, type Scope, type Term } from './query.ts';
 import type { Item, Kind, RawItem } from './types.ts';
 
 export interface Ctx {
-  /** window the popup belongs to */
+  /** window the switcher was opened in */
   win: number;
-  /** key of the active tab in that window */
+  /** key of the active tab in that window (derived from the items) */
   cur: string;
 }
 
@@ -35,17 +34,17 @@ function fields(it: Item): number[] {
 export function matchTerm(it: Item, term: Term, pos: number[] | null): number {
   const t = term.cs ? it.hay : it.low;
   const p = term.text;
-  const cls = clsOf(it);
+  // Char classes are only needed to score a hit, so the cheap rejections come first.
   switch (term.type) {
     case 'fuzzy':
-      return fuzzyMatch(t, cls, p, pos);
+      return fuzzyMatch(t, clsOf(it), p, pos);
     case 'exact':
-      return exactMatch(t, cls, p, pos);
+      return t.includes(p) ? exactMatch(t, clsOf(it), p, pos) : -1;
     case 'prefix': {
       const f = fields(it);
       for (let i = 0; i < f.length; i += 2) {
         if (f[i + 1] - f[i] >= p.length && t.startsWith(p, f[i])) {
-          return scoreRange(t, cls, p, f[i], f[i] + p.length, pos);
+          return scoreRange(t, clsOf(it), p, f[i], f[i] + p.length, pos);
         }
       }
       return -1;
@@ -54,14 +53,14 @@ export function matchTerm(it: Item, term: Term, pos: number[] | null): number {
       const f = fields(it);
       for (let i = 0; i < f.length; i += 2) {
         const s = f[i + 1] - p.length;
-        if (s >= f[i] && t.startsWith(p, s)) return scoreRange(t, cls, p, s, f[i + 1], pos);
+        if (s >= f[i] && t.startsWith(p, s)) return scoreRange(t, clsOf(it), p, s, f[i + 1], pos);
       }
       return -1;
     }
     case 'equal': {
       const e = titleEnd(it);
       if (e !== p.length || !t.startsWith(p)) return -1;
-      return scoreRange(t, cls, p, 0, e, pos);
+      return scoreRange(t, clsOf(it), p, 0, e, pos);
     }
   }
 }
@@ -72,8 +71,11 @@ export function matchItem(it: Item, q: Query): number {
   for (const g of q.groups) {
     let best = -1;
     for (const term of g) {
-      let s = matchTerm(it, term, null);
-      if (term.inv) s = s < 0 ? 0 : -1;
+      let s: number;
+      if (!term.inv) s = matchTerm(it, term, null);
+      // A negation only needs presence, never a score.
+      else if (term.type === 'exact') s = (term.cs ? it.hay : it.low).includes(term.text) ? -1 : 0;
+      else s = matchTerm(it, term, null) < 0 ? 0 : -1;
       if (s > best) best = s;
     }
     if (best < 0) return -1;
@@ -105,23 +107,10 @@ export function positionsFor(it: Item, q: Query): number[] {
 
 // ---------------------------------------------------------------- searcher
 
-function inScope(it: Item, q: Query, ctx: Ctx): boolean {
-  switch (q.scope) {
-    case '':
-      return true;
-    case 't':
-      return it.k === 'tab';
-    case 'w':
-      return it.k === 'tab' && it.win === ctx.win;
-    case 'g':
-      return it.k === 'group';
-    case 'c':
-      return it.k === 'closed';
-    case 'b':
-      return it.k === 'bookmark';
-    case 'h':
-      return it.k === 'history';
-  }
+const SCOPE_KIND: Record<Exclude<Scope, ''>, Kind> = { t: 'tab', w: 'tab', g: 'group', c: 'closed', b: 'bookmark', h: 'history' };
+
+function inScope(it: Item, scope: Scope, win: number): boolean {
+  return !scope || (it.k === SCOPE_KIND[scope] && (scope !== 'w' || it.win === win));
 }
 
 export interface Result {
@@ -172,31 +161,22 @@ export class Searcher {
   private last: (Result & { version: number }) | null = null;
   private ctx: Ctx = { win: -1, cur: '' };
 
-  get size(): number {
-    return this.all.length;
-  }
-
   get context(): Ctx {
     return this.ctx;
   }
 
-  setCtx(ctx: Ctx): void {
-    if (ctx.win === this.ctx.win && ctx.cur === this.ctx.cur) return;
-    this.ctx = ctx;
+  /** The window the switcher belongs to; the current tab is derived from it. */
+  setWin(win: number): void {
+    if (win === this.ctx.win) return;
+    this.ctx = { win, cur: '' };
     this.rebuild();
   }
 
   /** Replace tabs/groups/closed, reusing prepared items that did not change. */
-  setBase(raws: RawItem[]): void {
+  setBase(raws: RawItem[], win = this.ctx.win): void {
     const prev = new Map(this.base.map((it) => [it.key, it]));
-    this.base = raws.map((r) => {
-      const old = prev.get(r.k[0] + ':' + r.id);
-      if (old && old.title === r.title && old.url === r.url && old.gt === r.gt) {
-        const { hay, low, m0, m1, uOff, gOff, cls, key } = old;
-        return Object.assign(r, { hay, low, m0, m1, uOff, gOff, cls, key }) as Item;
-      }
-      return prepare(r);
-    });
+    this.base = raws.map((r) => reusePrepared(prev.get(keyOf(r)), r) ?? prepare(r));
+    this.ctx = { win, cur: '' };
     this.rebuild();
   }
 
@@ -205,10 +185,13 @@ export class Searcher {
     this.rebuild();
   }
 
-  /** Merge history items (deduped by url, newest data wins). */
-  addHistory(raws: RawItem[], replace = false): void {
-    const m = new Map(replace ? [] : this.history.map((it) => [it.url, it]));
-    for (const r of raws) m.set(r.url, prepare(r));
+  /** Merge history items (newest data wins); duplicates are dropped in rebuild. */
+  addHistory(raws: RawItem[]): void {
+    const m = new Map(this.history.map((it) => [it.nu, it]));
+    for (const r of raws) {
+      const it = prepare(r);
+      m.set(it.nu, it);
+    }
     this.history = Array.from(m.values());
     this.rebuild();
   }
@@ -223,16 +206,23 @@ export class Searcher {
   }
 
   private rebuild(now = Date.now()): void {
-    // An open tab beats a bookmark, history entry or closed tab for the same
-    // page (ignoring #fragment and trailing slash): switching is what you want.
-    const open = new Set<string>();
-    for (const it of this.base) if (it.k === 'tab') open.add(normUrl(it.url));
-    const base = this.base.filter((it) => it.k !== 'closed' || !it.url || !open.has(normUrl(it.url)));
-    const bm = this.bookmarks.filter((it) => !open.has(normUrl(it.url)));
-    for (const it of bm) open.add(normUrl(it.url));
-    const hist = this.history.filter((it) => !open.has(normUrl(it.url)));
-    let all = base.concat(bm, hist);
-    if (all.length > MAX_ITEMS) all = all.slice(0, MAX_ITEMS);
+    // One pass in priority order (tabs and groups, then closed, bookmarks,
+    // history): the first item for a page wins, ignoring #fragment and
+    // trailing slash, so an open tab hides the same page elsewhere.
+    const seen = new Set<string>();
+    for (const it of this.base) if (it.k === 'tab' && it.nu) seen.add(it.nu);
+    const all: Item[] = [];
+    let cur = '';
+    for (const list of [this.base, this.bookmarks, this.history]) {
+      for (const it of list) {
+        if (it.k !== 'tab' && it.nu) {
+          if (seen.has(it.nu)) continue;
+          seen.add(it.nu);
+        } else if (it.k === 'tab' && it.act && it.win === this.ctx.win) cur = it.key;
+        if (all.length < MAX_ITEMS) all.push(it);
+      }
+    }
+    this.ctx.cur = cur;
     for (let i = 0; i < all.length; i++) {
       const it = all[i];
       it.ord = i;
@@ -255,16 +245,11 @@ export class Searcher {
   }
 
   private defaults(q: Query): Result {
-    const ctx = this.ctx;
-    const kind: Kind = q.scope === 'g' ? 'group' : q.scope === 'c' ? 'closed' : q.scope === 'b' ? 'bookmark' : q.scope === 'h' ? 'history' : 'tab';
-    const sel: Item[] = [];
-    for (const it of this.all) {
-      if (it.k !== kind) continue;
-      if (q.scope === 'w' && it.win !== ctx.win) continue;
-      sel.push(it);
-    }
+    const { win, cur } = this.ctx;
+    const kind = q.scope ? SCOPE_KIND[q.scope] : 'tab';
+    const sel = this.all.filter((it) => inScope(it, q.scope || 't', win));
     const score = (it: Item) =>
-      it.key === ctx.cur ? -1 : kind === 'bookmark' ? (it.fr ?? 0) * 1e13 + (it.la ?? 0) : (it.la ?? 0);
+      it.key === cur ? -1 : kind === 'bookmark' ? (it.fr ?? 0) * 1e13 + (it.la ?? 0) : (it.la ?? 0);
     sel.sort((a, b) => score(b) - score(a) || a.ord - b.ord);
     return { q, ids: Int32Array.from(sel, (it) => it.ord), items: this.all };
   }
@@ -284,27 +269,19 @@ export class Searcher {
     } else {
       const all = this.all;
       const last = this.last;
-      const narrow = last && last.version === this.version && last.q.groups.length > 0 && canNarrow(last.q, q);
-      const { m0, m1 } = q;
+      // Narrowing rescans only the previous hits (same scope, so no scope check needed).
+      const ids = last && last.version === this.version && last.q.groups.length > 0 && canNarrow(last.q, q) ? last.ids : null;
+      const len = ids ? ids.length : all.length;
+      const { m0, m1, scope } = q;
+      const win = this.ctx.win;
       const kb = keyBuf;
       let n = 0;
-      if (narrow) {
-        const ids = last.ids;
-        for (let i = 0; i < ids.length; i++) {
-          const it = all[ids[i]];
-          if ((it.m0 & m0) !== m0 || (it.m1 & m1) !== m1) continue;
-          const s = matchItem(it, q);
-          if (s >= 0) kb[n++] = sortKey(it, s + it.boost);
-        }
-      } else {
-        const ctx = this.ctx;
-        for (let i = 0; i < all.length; i++) {
-          const it = all[i];
-          if ((it.m0 & m0) !== m0 || (it.m1 & m1) !== m1) continue;
-          if (q.scope && !inScope(it, q, ctx)) continue;
-          const s = matchItem(it, q);
-          if (s >= 0) kb[n++] = sortKey(it, s + it.boost);
-        }
+      for (let i = 0; i < len; i++) {
+        const it = all[ids ? ids[i] : i];
+        if ((it.m0 & m0) !== m0 || (it.m1 & m1) !== m1) continue;
+        if (!ids && scope && !inScope(it, scope, win)) continue;
+        const s = matchItem(it, q);
+        if (s >= 0) kb[n++] = sortKey(it, s + it.boost);
       }
       res = finish(n, all, q);
     }

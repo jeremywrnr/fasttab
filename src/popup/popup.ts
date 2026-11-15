@@ -6,35 +6,15 @@
 //   stage 3  idle     bookmarks + recent history
 //   stage 4  typing   live history.search (debounced) for older pages
 
+import { keyOf, SEP } from '../core/prepare.ts';
 import { parseQuery } from '../core/query.ts';
 import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
-import type { FrecMap } from '../core/frecency.ts';
-import {
-  currentShortcut,
-  recentlyClosed,
-  loadBookmarks,
-  loadRecentHistory,
-  openShortcutSettings,
-  performAction,
-  searchHistory,
-  type ActItem,
-} from '../shared/actions.ts';
 import type { Item, RawItem } from '../core/types.ts';
-import { prettyUrl } from '../core/text.ts';
-import type { Msg } from '../shared/messages.ts';
-import {
-  closedToRaw,
-  groupsToRaw,
-  hasGroups,
-  SNAP_FULL,
-  SNAP_TOP,
-  tabToRaw,
-  type GroupInfo,
-  type Snapshot,
-} from '../shared/raw.ts';
+import { recentlyClosed } from '../shared/actions.ts';
+import { buildRaw, hasGroups, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
+import { DEFAULT_SHORTCUT, prettyShortcut, shortcutMatcher } from '../shared/shortcut.ts';
+import { direct, send, viaBackground, type Backend } from './backend.ts';
 import { VList, type Row } from './vlist.ts';
-import { shortcutMatcher } from '../shared/shortcut.ts';
-import { captureEnabled, requestCapture } from '../shared/capture.ts';
 
 declare const __FIREFOX__: boolean;
 declare const __CHROME__: boolean;
@@ -69,28 +49,16 @@ const TOKEN = location.hash.startsWith('#o=') ? location.hash.slice(3) : '';
 const OVERLAY = !!TOKEN;
 if (OVERLAY) document.documentElement.classList.add('overlay');
 const MAX_ROWS = 10;
-const ROW_H = 32;
+
+const overlayApi = OVERLAY ? viaBackground(TOKEN) : null;
+const api: Backend = overlayApi ?? direct;
 
 const s = new Searcher();
 let res: Result | null = null;
 let sel = 0;
 let snapV = -1;
 let fullLoaded = false;
-let popupWin = -1;
-let snapWin = -1;
 let firstPaint = 0;
-
-const send = (m: Msg) => chrome.runtime.sendMessage(m).catch(() => undefined);
-
-// Overlay requests go through the background: an extension page framed in a
-// web page gets no tabs/storage API in Firefox. The background answers only
-// for a known token, so a page that frames popup.html itself gets nothing.
-type OvReq = Msg extends infer M ? (M extends { token: string } ? Omit<M, 'token'> : never) : never;
-const ov = <T>(m: OvReq): Promise<T | undefined> =>
-  chrome.runtime.sendMessage({ ...m, token: TOKEN }).then(
-    (r) => (r ?? undefined) as T | undefined,
-    () => undefined,
-  );
 
 function dismiss(): void {
   if (OVERLAY) parent.postMessage({ ft: 'close' }, '*');
@@ -106,7 +74,7 @@ function layout(): void {
   const show = showList();
   const n = count();
   $results.hidden = !show;
-  $inner.parentElement!.style.height = n ? Math.min(n, MAX_ROWS) * ROW_H + 'px' : '';
+  $inner.parentElement!.style.height = n ? Math.min(n, MAX_ROWS) * list.rowH + 'px' : '';
   $empty.hidden = n > 0 || !fullLoaded;
   // Collapsed: hint at what Enter will do.
   $hint.textContent = !show && res && n ? '↵ ' + at(res, 0).title : '';
@@ -207,9 +175,10 @@ function renderRow(row: Row, i: number): void {
   row.dot.title = glyph ? glyph[1] : '';
   if (it.k === 'group') row.dot.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
   highlight(row.t, it.title, 0, pos);
-  const disp = it.k === 'group' ? '' : prettyUrl(it.url);
+  // the url as shown is already in the haystack (prepare), between uOff and the group
+  const disp = it.uOff >= 0 ? it.hay.slice(it.uOff, it.gOff >= 0 ? it.gOff - SEP.length : undefined) : '';
   if (it.uOff >= 0) highlight(row.u, disp, it.uOff, pos);
-  else row.u.textContent = it.k === 'group' ? 'tab group' : disp;
+  else row.u.textContent = it.k === 'group' ? 'tab group' : '';
   if (it.gt && it.k !== 'group') {
     row.chip.hidden = false;
     highlight(row.chip, it.gt, it.gOff, pos);
@@ -287,20 +256,9 @@ function move(d: number): void {
 async function activate(mod: boolean, shift: boolean): Promise<void> {
   if (!res || sel >= count()) return;
   const it = at(res, sel);
-  const act: ActItem = {
-    k: it.k,
-    id: it.id,
-    win: it.win,
-    mru: it.mru,
-    col: it.col,
-    url: it.k === 'group' ? (s.get('t:' + it.mru)?.url ?? '') : it.url,
-  };
-  if (OVERLAY) {
-    await ov({ t: 'ov:act', it: act, win: s.context.win, mod, shift });
-  } else {
-    const url = await performAction(act, s.context.win, mod, shift).catch(() => undefined);
-    if (url) void send({ t: 'visit', url });
-  }
+  // A group opens its most recent tab; credit that page.
+  const url = it.k === 'group' ? (s.get(keyOf({ k: 'tab', id: it.mru ?? -1 } as RawItem))?.url ?? '') : it.url;
+  await api.act({ k: it.k, id: it.id, win: it.win, mru: it.mru, col: it.col, url }, s.context.win, mod, shift);
   dismiss();
 }
 
@@ -308,12 +266,12 @@ async function closeSelected(): Promise<void> {
   if (!res || sel >= count()) return;
   const it = at(res, sel);
   if (it.k !== 'tab') return;
+  const keep = sel;
   s.remove(it.key);
   refresh(false);
-  sel = Math.min(sel, Math.max(0, count() - 1));
+  sel = Math.min(keep, Math.max(0, count() - 1)); // stay on the row below the closed one
   list.draw();
-  if (OVERLAY) await ov({ t: 'ov:closeTab', id: it.id as number });
-  else await chrome.tabs.remove(it.id as number).catch(() => undefined);
+  await api.closeTab(it.id as number);
 }
 
 // ------------------------------------------------------------------ input
@@ -360,51 +318,38 @@ $q.addEventListener('keydown', (e) => {
 function applySnapshot(sn: Snapshot | undefined, full: boolean): void {
   if (!sn || sn.v < snapV || (!full && fullLoaded)) return;
   snapV = sn.v;
-  snapWin = sn.win;
   if (full) fullLoaded = true;
-  setBase(sn.items);
+  setBase(sn.items, sn.win);
 }
 
-let baseItems: RawItem[] = [];
-function setBase(items: RawItem[]): void {
-  baseItems = items;
-  const win = popupWin >= 0 ? popupWin : snapWin;
-  const cur = items.find((r) => r.k === 'tab' && r.act && r.win === win);
-  s.setCtx({ win, cur: cur ? 't:' + cur.id : '' });
-  s.setBase(items);
+/** `win` is a fallback; the popup's own window wins once known. */
+let ownWin = -1;
+function setBase(items: RawItem[], win: number): void {
+  s.setBase(items, ownWin >= 0 ? ownWin : win);
   refresh(true);
 }
 
 /** No snapshot yet (fresh install, worker not run): build one here. */
 async function liveFallback(): Promise<void> {
-  const [tabs, gs, cl] = await Promise.all([
+  const [tabs, gs, cl, w] = await Promise.all([
     chrome.tabs.query({}),
-    hasGroups() ? chrome.tabGroups.query({}) : Promise.resolve([]),
+    hasGroups() ? chrome.tabGroups.query({}).catch(() => []) : Promise.resolve([]),
     recentlyClosed(),
+    chrome.windows.getCurrent().catch(() => undefined),
   ]);
   if (fullLoaded) return;
-  const groups = new Map<number, GroupInfo>(gs.map((g) => [g.id, g]));
-  const now = Date.now();
-  const tabItems = tabs.filter((t) => t.id !== undefined).map((t) => tabToRaw(t, groups, {}, now, undefined, !__CHROME__));
   fullLoaded = true;
-  setBase(tabItems.concat(groupsToRaw(groups, tabItems), closedToRaw(cl)));
+  setBase(buildRaw(tabs, new Map<number, GroupInfo>(gs.map((g) => [g.id, g])), cl, {}, Date.now()), w?.id ?? -1);
 }
 
 const idle = (fn: () => void) =>
   'requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 300 }) : setTimeout(fn, 50);
 
 async function loadExtras(): Promise<void> {
-  const bookmarks = OVERLAY
-    ? await ov<RawItem[]>({ t: 'ov:bookmarks' })
-    : await chrome.storage.local
-        .get('ft_frec')
-        .catch(() => ({}) as Record<string, unknown>)
-        .then((st) => loadBookmarks((st.ft_frec as FrecMap | undefined) ?? {}));
-  s.setBookmarks(bookmarks ?? []);
+  s.setBookmarks(await api.bookmarks());
   refresh(true);
   idle(async () => {
-    const hist = OVERLAY ? await ov<RawItem[]>({ t: 'ov:recent' }) : await loadRecentHistory();
-    s.addHistory(hist ?? []);
+    s.addHistory(await api.recent());
     refresh(true);
   });
 }
@@ -415,78 +360,62 @@ function liveHistory(): void {
   const q = parseQuery($q.value);
   if (q.plain.length < 2 || (q.scope !== '' && q.scope !== 'h')) return;
   histTimer = setTimeout(async () => {
-    const hist = OVERLAY ? await ov<RawItem[]>({ t: 'ov:history', text: q.plain }) : await searchHistory(q.plain);
-    if (!hist?.length || parseQuery($q.value).plain !== q.plain) return;
+    const hist = await api.history(q.plain);
+    if (!hist.length || parseQuery($q.value).plain !== q.plain) return;
     s.addHistory(hist);
     refresh(true);
   }, HISTORY_LIVE_DEBOUNCE);
 }
 
-// Firefox does not run extension shortcuts while focus is inside the
+// Firefox doesn't run extension shortcuts while focus is inside the
 // extension's own frame or popup, so pressing the shortcut again would just
-// type a character. Recognize it here and close, like a toggle.
-let toggleKey: ((e: KeyboardEvent) => boolean) | null = null;
+// type a character. Recognize it here and close, like a toggle. (Elsewhere the
+// browser takes the key first, so this never fires.)
+let toggleKey = shortcutMatcher(DEFAULT_SHORTCUT());
 
 async function shortcutHint(): Promise<void> {
-  const sc = OVERLAY ? await ov<string>({ t: 'ov:shortcut' }) : await currentShortcut();
-  if (__FIREFOX__) toggleKey = shortcutMatcher(sc || (navigator.platform.startsWith('Mac') ? 'MacCtrl+K' : 'Alt+K'));
+  const sc = await api.shortcut();
+  toggleKey = shortcutMatcher(sc || DEFAULT_SHORTCUT());
   $shortcut.hidden = false;
-  $shortcut.textContent = (sc && prettyKey(sc)) || 'shortcut';
+  $shortcut.textContent = sc ? prettyShortcut(sc) : 'shortcut';
   $shortcut.title = 'Change the fasttab shortcut';
   $shortcut.onclick = (e) => {
     e.preventDefault();
-    if (OVERLAY) void ov({ t: 'ov:settings' });
-    else openShortcutSettings();
+    api.openSettings();
     dismiss();
   };
+  if (__FIREFOX__) void captureHint(sc);
 }
 
-// Firefox, while "⌃K everywhere" is off: a quiet footer link to turn it on.
-async function captureHint(): Promise<void> {
-  if (!__FIREFOX__) return;
-  const on = OVERLAY ? await ov<boolean>({ t: 'ov:capture' }) : await captureEnabled();
-  if (on !== false) return;
+// Firefox, while "shortcut everywhere" is off: a quiet footer link to turn it on.
+async function captureHint(sc: string): Promise<void> {
+  if (await api.capture()) return;
   const $fix = document.getElementById('fix') as HTMLAnchorElement;
-  const key = $shortcut.textContent && $shortcut.textContent !== 'shortcut' ? prettyKey($shortcut.textContent) : prettyKey('');
-  $fix.textContent = `${key} blocked on some sites? Fix`;
+  $fix.textContent = `${prettyShortcut(sc)} blocked on some sites? Fix`;
   $fix.hidden = false;
   $shortcut.hidden = true;
   $fix.onclick = (e) => {
     e.preventDefault();
-    if (OVERLAY) {
-      // The in-page frame can't ask for permissions; the setup page can.
-      void ov({ t: 'ov:setup' });
-      dismiss();
-    } else {
-      // Toolbar popup: ask right here (must be synchronous with the click).
-      void requestCapture().then((ok) => {
-        if (ok) {
-          $fix.hidden = true;
-          $shortcut.hidden = false;
-        }
-      });
-    }
+    // Straight from the click: the toolbar popup asks for the permission here.
+    void api.fixCapture().then((on) => {
+      $fix.hidden = on;
+      $shortcut.hidden = !on;
+    });
+    if (OVERLAY) dismiss();
   };
-}
-
-function prettyKey(sc: string): string {
-  const mac = navigator.platform.startsWith('Mac');
-  if (!sc) return mac ? '⌃K' : 'Alt+K';
-  return mac ? sc.replace(/MacCtrl\+|Ctrl\+/g, '⌃').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧').replace(/Command\+/g, '⌘') : sc;
 }
 
 function afterBase(): void {
   idle(() => void loadExtras());
-  idle(() => void shortcutHint().then(captureHint));
+  idle(() => void shortcutHint());
 }
 
-if (OVERLAY) {
+if (overlayApi) {
   // One round trip: the background already holds the live index.
-  void ov<{ items: RawItem[]; win: number }>({ t: 'ov:init' }).then((r) => {
+  void overlayApi.init().then((r) => {
     if (!r) return;
-    popupWin = snapWin = r.win;
     fullLoaded = true;
-    setBase(r.items);
+    setBase(r.items, r.win);
     afterBase();
   });
 } else {
@@ -502,9 +431,10 @@ if (OVERLAY) {
   // The snapshot's focused window is almost always the popup's; confirm it.
   void chrome.windows.getCurrent().then((w) => {
     // The popup-window fallback lives in its own window; act on the browser window behind it.
-    if (w.id === undefined || w.id === popupWin || w.type === 'popup') return;
-    popupWin = w.id;
-    if (baseItems.length && popupWin !== s.context.win) setBase(baseItems);
+    if (w.id === undefined || w.type === 'popup') return;
+    ownWin = w.id;
+    s.setWin(w.id);
+    if (fullLoaded) refresh(true);
   });
   // Live updates while the popup is open (tab closed elsewhere, title changes).
   chrome.storage.onChanged.addListener((changes, area) => {

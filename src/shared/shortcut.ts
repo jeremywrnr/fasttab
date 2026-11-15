@@ -25,3 +25,20 @@ export function shortcutMatcher(sc: string): ((e: KeyLike) => boolean) | null {
     e.metaKey === meta &&
     e.ctrlKey === ctrl;
 }
+
+/** The one command fasttab registers (manifest "commands"). */
+export const COMMAND = 'open-switcher';
+
+/** Mirrors manifest suggested_key: ⌃K on macOS, Alt+K elsewhere. */
+export const DEFAULT_SHORTCUT = (): string => (navigator.platform.startsWith('Mac') ? 'MacCtrl+K' : 'Alt+K');
+
+/** Display form: "MacCtrl+K" → "⌃K" on macOS; empty → the default. */
+export function prettyShortcut(sc: string): string {
+  const s = sc || DEFAULT_SHORTCUT();
+  if (!navigator.platform.startsWith('Mac')) return s;
+  return s
+    .replace(/(MacCtrl|Ctrl)\+/g, '⌃')
+    .replace(/Alt\+/g, '⌥')
+    .replace(/Shift\+/g, '⇧')
+    .replace(/Command\+/g, '⌘');
+}

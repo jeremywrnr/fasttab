@@ -1,3 +1,4 @@
+import { normUrl } from './frecency.ts';
 import { classesOf, lowerAligned, maskOf, prettyUrl } from './text.ts';
 import type { Item, RawItem } from './types.ts';
 
@@ -30,6 +31,7 @@ export function prepare(r: RawItem): Item {
   it.m1 = m1;
   it.uOff = uOff;
   it.gOff = gOff;
+  it.nu = normUrl(r.url);
   it.cls = undefined;
   it.ord = 0;
   it.boost = 0;
@@ -38,4 +40,11 @@ export function prepare(r: RawItem): Item {
 
 export function clsOf(it: Item): Uint8Array {
   return it.cls ?? (it.cls = classesOf(it.hay));
+}
+
+/** Carry match data over from `old` when the searchable text did not change. */
+export function reusePrepared(old: Item | undefined, r: RawItem): Item | undefined {
+  if (!old || old.title !== r.title || old.url !== r.url || old.gt !== r.gt) return undefined;
+  const { key, hay, low, m0, m1, uOff, gOff, nu, cls } = old;
+  return Object.assign(r, { key, hay, low, m0, m1, uOff, gOff, nu, cls, ord: 0, boost: 0 });
 }
