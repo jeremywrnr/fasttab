@@ -365,12 +365,18 @@ function injectOverlay(src: string, origin: string): string {
   const scheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   const frame = document.createElement('iframe');
   frame.src = src;
-  frame.style.cssText = `position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;color-scheme:${scheme};`;
+  // Invisible (but focusable) until the switcher has painted, so the frame's
+  // blank first document never flashes over the page.
+  frame.style.cssText = `position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;color-scheme:${scheme};opacity:0;`;
+  const show = () => (frame.style.opacity = '1');
+  setTimeout(show, 400); // in case the ready message never comes
   root.appendChild(frame);
   const prev = document.activeElement as HTMLElement | null;
   const onMsg = (e: MessageEvent) => {
     if (e.origin !== origin || e.source !== frame.contentWindow) return;
-    if ((e.data as { ft?: string })?.ft === 'close') close();
+    const ft = (e.data as { ft?: string })?.ft;
+    if (ft === 'ready') show();
+    else if (ft === 'close') close();
   };
   const onVis = () => {
     if (document.hidden) close();

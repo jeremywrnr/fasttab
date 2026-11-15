@@ -61,7 +61,9 @@ let snapV = -1;
 let fullLoaded = false;
 
 // Overlay: the frame covers the page, so a click outside the panel closes it.
+// It stays invisible until this first paint, then the page shows it.
 if (OVERLAY) {
+  requestAnimationFrame(() => requestAnimationFrame(() => parent.postMessage({ ft: 'ready' }, '*')));
   document.addEventListener('mousedown', (e) => {
     if (!$panel.contains(e.target as Node)) dismiss();
   });
