@@ -87,6 +87,15 @@ These were measured on an M-series Mac with Node 24, typing queries one characte
 
 In Chrome 156 with 2,000 tabs in 30 groups, search plus render took 2–6 ms per keystroke. That run used the real popup with mocked APIs, via `scripts/harness.mjs`.
 
+Real-browser checks, with 300 tabs in 12 groups:
+
+| | Chrome 156 (unpacked) | Firefox 160 (`web-ext run`) |
+| --- | --- | --- |
+| Shortcut | ⌥K default; ⌘P when set by hand (wins over Print) | ⌥K default (`Alt+K` reported by `commands.getAll`) |
+| Popup opened to first rows | 77 ms | 11 ms |
+| Search + render per keystroke | 2–6 ms | 0.5–4.6 ms |
+| Switch, group solo (⇧↵), empty-query ↵ → previous tab | ✓ | ✓ |
+
 ## Development
 
 | Command | Does |
