@@ -16,30 +16,42 @@
       kbd { font: 600 13px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; }
       ol { margin: 0 0 16px; padding-left: 20px; }
       li { margin: 4px 0; }
-      button { font: inherit; background: var(--accent); color: var(--bg); border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+      button { font: inherit; background: transparent; color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+      button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; padding: 10px 20px; }
+      .hero { border-color: var(--accent); border-width: 2px; }
+      h2 { font-size: 18px; margin: 0 0 8px; }
+      .k { font: 600 0.95em ui-monospace, monospace; }
+      a { color: var(--accent); }
       .done { color: var(--ok); font-weight: 600; }
-      .toggle { display: flex; gap: 10px; align-items: center; font-weight: 600; cursor: pointer; }
-      .small { font-size: 13px; margin: 10px 0 0; }
+      .small { font-size: 13px; margin: 12px 0 0; }
       [hidden] { display: none !important; }
     </style>
   </head>
   <body>
     <main>
       <h1>fasttab</h1>
-      <p>Press <kbd>⌃K</kbd> (Alt+K on Windows/Linux, or the key you set below) on any page, type a few letters, and hit <kbd>↵</kbd>. An empty query plus <kbd>↵</kbd> jumps back to your previous tab.</p>
-      <div class="card">
-        <div class="now">Current shortcut: <kbd id="current">none</kbd> <span id="ok" class="done" hidden>✓ all set</span></div>
-        <div id="steps">
-          <p id="why"></p>
-          <ol id="list"></ol>
-          <button id="open">Open shortcut settings</button>
+      <p>Press <kbd id="key">⌃K</kbd> on any page, type a few letters, and hit <kbd>↵</kbd>. <kbd id="key2">⌃K</kbd> then <kbd>↵</kbd> jumps back to your previous tab.</p>
+
+      <div class="card hero" id="capture-card" hidden>
+        <div id="capture-off">
+          <h2>Make <span class="k">⌃K</span> work everywhere</h2>
+          <p>Some sites keep the shortcut for themselves. In Google Docs, <span class="k">⌃K</span> deletes to the end of the line, and Figma and online code editors grab keys too. Turn this on and fasttab gets the key first on every site.</p>
+          <button id="capture-on-btn" class="primary">Turn on</button>
+          <p class="small">Firefox will ask to let fasttab access all websites. fasttab only listens for its shortcut there, and sends nothing anywhere.</p>
+        </div>
+        <div id="capture-on" hidden>
+          <h2><span class="done">✓</span> <span class="k">⌃K</span> works everywhere</h2>
+          <p class="small">fasttab catches its shortcut before sites like Google Docs do. <a href="#" id="capture-off-link">Turn off</a></p>
         </div>
       </div>
-      <div class="card" id="capture-card" hidden>
-        <label class="toggle"><input type="checkbox" id="capture" /> Capture the shortcut on every page</label>
-        <p class="small">Some sites keep the shortcut for themselves: <kbd>⌃K</kbd> deletes to the end of the line in Google Docs, and editors like Figma or VS Code for the Web grab keys too. With this on, fasttab listens for its shortcut inside every page and frame, and opens before the site sees the key. Firefox will ask for access to all websites; the listener only watches for this one key combination and sends nothing anywhere.</p>
+
+      <div class="card">
+        <div class="now">Current shortcut: <kbd id="current">none</kbd> <span id="ok" class="done" hidden>✓</span></div>
+        <p id="why"></p>
+        <ol id="list"></ol>
+        <button id="open">Change shortcut</button>
       </div>
-      <p>Search syntax: <kbd>g:</kbd> groups, <kbd>w:</kbd> this window, <kbd>c:</kbd> recently closed, <kbd>b:</kbd> bookmarks, <kbd>h:</kbd> history. fzf operators work too: <kbd>'exact</kbd> <kbd>^prefix</kbd> <kbd>suffix$</kbd> <kbd>!not</kbd>.</p>
+      <p class="small">Search syntax: <kbd>g:</kbd> groups, <kbd>w:</kbd> this window, <kbd>c:</kbd> recently closed, <kbd>b:</kbd> bookmarks, <kbd>h:</kbd> history. fzf operators work too: <kbd>'exact</kbd> <kbd>^prefix</kbd> <kbd>suffix$</kbd> <kbd>!not</kbd>.</p>
     </main>
     <script src="welcome.js"></script>
   </body>

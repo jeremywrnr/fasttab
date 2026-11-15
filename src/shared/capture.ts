@@ -1,21 +1,31 @@
-// "Capture the shortcut on every page" (Firefox, opt-in). Needs the optional
-// <all_urls> host permission; registers src/hotkey as a dynamic content script.
+// "⌃K everywhere" (Firefox): pages like Google Docs swallow the shortcut
+// before the browser sees it. With the optional <all_urls> host permission
+// granted, src/hotkey runs at document_start in every frame and catches it
+// first. The permission *is* the setting: granted = on, removed = off.
 
 export const SHORTCUT_KEY = 'ft_shortcut';
-export const CAPTURE_KEY = 'ft_capture';
 const SCRIPT_ID = 'ft-hotkey';
-const ALL = { origins: ['<all_urls>'] };
+export const ALL_SITES = { origins: ['<all_urls>'] };
 
 export const DEFAULT_SHORTCUT = () => (navigator.platform.startsWith('Mac') ? 'MacCtrl+K' : 'Alt+K');
 
-export async function captureEnabled(): Promise<boolean> {
-  const [st, perm] = await Promise.all([chrome.storage.local.get(CAPTURE_KEY), chrome.permissions.contains(ALL)]);
-  return !!st[CAPTURE_KEY] && perm;
+export function captureEnabled(): Promise<boolean> {
+  return chrome.permissions.contains(ALL_SITES).catch(() => false);
 }
 
-async function register(): Promise<void> {
+/** Must be called synchronously from a click (Firefox drops the prompt otherwise). */
+export function requestCapture(): Promise<boolean> {
+  return chrome.permissions.request(ALL_SITES).catch(() => false);
+}
+
+export async function disableCapture(): Promise<void> {
+  await chrome.permissions.remove(ALL_SITES).catch(() => false);
+  await syncCapture();
+}
+
+async function register(): Promise<boolean> {
   const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] }).catch(() => []);
-  if (existing.length) return;
+  if (existing.length) return false;
   const base = {
     id: SCRIPT_ID,
     matches: ['<all_urls>'],
@@ -28,15 +38,17 @@ async function register(): Promise<void> {
   await chrome.scripting
     .registerContentScripts([{ ...base, matchOriginAsFallback: true }])
     .catch(() => chrome.scripting.registerContentScripts([base]));
+  return true;
 }
 
-/** Call from a user gesture (permission prompt). Returns whether it is on. */
-export async function enableCapture(): Promise<boolean> {
-  const ok = await chrome.permissions.request(ALL).catch(() => false);
-  if (!ok) return false;
-  await chrome.storage.local.set({ [CAPTURE_KEY]: true });
-  await register();
-  // Pages already open won't get the registered script until reload.
+/** Keep the content script registration in step with the permission (background). */
+export async function syncCapture(): Promise<void> {
+  if (!(await captureEnabled())) {
+    await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] }).catch(() => undefined);
+    return;
+  }
+  if (!(await register())) return;
+  // Newly on: pages already open won't get the registered script until reload, so add it now.
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   await Promise.all(
     tabs.map((t) =>
@@ -45,17 +57,4 @@ export async function enableCapture(): Promise<boolean> {
         : chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ['hotkey.js'] }).catch(() => undefined),
     ),
   );
-  return true;
-}
-
-export async function disableCapture(): Promise<void> {
-  await chrome.storage.local.set({ [CAPTURE_KEY]: false });
-  await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] }).catch(() => undefined);
-  // Listeners already in open pages stay until reload; they only message the background, which ignores them now.
-}
-
-/** On startup: keep the registration in step with the setting and permission. */
-export async function syncCapture(): Promise<void> {
-  if (await captureEnabled()) await register();
-  else await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] }).catch(() => undefined);
 }

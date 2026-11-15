@@ -33,6 +33,7 @@ import {
 } from '../shared/raw.ts';
 import { VList, type Row } from './vlist.ts';
 import { shortcutMatcher } from '../shared/shortcut.ts';
+import { captureEnabled, requestCapture } from '../shared/capture.ts';
 
 declare const __FIREFOX__: boolean;
 
@@ -428,7 +429,7 @@ async function shortcutHint(): Promise<void> {
   const sc = OVERLAY ? await ov<string>({ t: 'ov:shortcut' }) : await currentShortcut();
   if (__FIREFOX__) toggleKey = shortcutMatcher(sc || (navigator.platform.startsWith('Mac') ? 'MacCtrl+K' : 'Alt+K'));
   $shortcut.hidden = false;
-  $shortcut.textContent = sc || 'shortcut';
+  $shortcut.textContent = (sc && prettyKey(sc)) || 'shortcut';
   $shortcut.title = 'Change the fasttab shortcut';
   $shortcut.onclick = (e) => {
     e.preventDefault();
@@ -438,9 +439,43 @@ async function shortcutHint(): Promise<void> {
   };
 }
 
+// Firefox, while "⌃K everywhere" is off: a quiet footer link to turn it on.
+async function captureHint(): Promise<void> {
+  if (!__FIREFOX__) return;
+  const on = OVERLAY ? await ov<boolean>({ t: 'ov:capture' }) : await captureEnabled();
+  if (on !== false) return;
+  const $fix = document.getElementById('fix') as HTMLAnchorElement;
+  const key = $shortcut.textContent && $shortcut.textContent !== 'shortcut' ? prettyKey($shortcut.textContent) : prettyKey('');
+  $fix.textContent = `${key} blocked on some sites? Fix`;
+  $fix.hidden = false;
+  $shortcut.hidden = true;
+  $fix.onclick = (e) => {
+    e.preventDefault();
+    if (OVERLAY) {
+      // The in-page frame can't ask for permissions; the setup page can.
+      void ov({ t: 'ov:setup' });
+      dismiss();
+    } else {
+      // Toolbar popup: ask right here (must be synchronous with the click).
+      void requestCapture().then((ok) => {
+        if (ok) {
+          $fix.hidden = true;
+          $shortcut.hidden = false;
+        }
+      });
+    }
+  };
+}
+
+function prettyKey(sc: string): string {
+  const mac = navigator.platform.startsWith('Mac');
+  if (!sc) return mac ? '⌃K' : 'Alt+K';
+  return mac ? sc.replace(/MacCtrl\+|Ctrl\+/g, '⌃').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧').replace(/Command\+/g, '⌘') : sc;
+}
+
 function afterBase(): void {
   idle(() => void loadExtras());
-  idle(() => void shortcutHint());
+  idle(() => void shortcutHint().then(captureHint));
 }
 
 if (OVERLAY) {

@@ -251,6 +251,13 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
       case 'ov:shortcut':
         reply(await currentShortcut());
         return;
+      case 'ov:capture':
+        reply(await captureEnabled());
+        return;
+      case 'ov:setup':
+        void chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html#setup') });
+        reply(true);
+        return;
       case 'ov:settings':
         openShortcutSettings();
         reply(true);
@@ -277,7 +284,11 @@ function visit(url: string): void {
 }
 
 chrome.runtime.onStartup.addListener(() => void init());
-chrome.runtime.onInstalled.addListener(() => void init());
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  void init();
+  // Firefox: offer "⌃K everywhere" once, right away, so sites like Google Docs don't eat the shortcut.
+  if (__FIREFOX__ && reason === 'install') void chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html#setup') });
+});
 void init();
 
 // ------------------------------------------------------------------ overlay
@@ -391,4 +402,9 @@ async function syncShortcut(): Promise<void> {
 }
 (chrome.commands as { onChanged?: chrome.events.Event<() => void> }).onChanged?.addListener(() => void syncShortcut());
 void syncShortcut();
-if (__FIREFOX__) void syncCapture();
+if (__FIREFOX__) {
+  void syncCapture();
+  // Granted from the setup page, options or the popup's "Fix" link; revoked there or in about:addons.
+  chrome.permissions.onAdded.addListener(() => void syncCapture());
+  chrome.permissions.onRemoved.addListener(() => void syncCapture());
+}
