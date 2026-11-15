@@ -13,7 +13,7 @@ just package    # fasttab-chrome.zip, fasttab-firefox.zip, fasttab-safari.zip (+
 
 | Browser | Load a dev build | Package |
 | --- | --- | --- |
-| **Firefox** | `about:debugging` → This Firefox → Load Temporary Add-on → `dist/firefox/manifest.json` (or `just run-firefox`) | `fasttab-firefox.zip` for addons.mozilla.org, or sign it unlisted with `web-ext sign` to install permanently |
+| **Firefox** | `about:debugging` → This Firefox → Load Temporary Add-on → `dist/firefox/manifest.json` (or `just firefox-dev` for your own Firefox, `just run-firefox` for a throwaway one) | `fasttab-firefox.zip` for addons.mozilla.org, or `just sign-firefox` to install permanently |
 | **Chrome** | `chrome://extensions` → Developer mode → Load unpacked → `dist/chrome` | `fasttab-chrome.zip` is what the Chrome Web Store upload takes |
 | **Safari** (macOS, needs Xcode) | Open `dist/fasttab-safari.app` once. Then in Safari: Settings → Advanced → turn on "Show features for web developers", choose Develop → Allow Unsigned Extensions, and enable fasttab under Settings → Extensions. | `just package-safari` builds an ad-hoc-signed app via `safari-web-extension-converter`. `TEAM_ID=<team> just package-safari` signs it with your Apple Developer team so it loads without the unsigned-extensions switch. |
 
@@ -107,10 +107,19 @@ Real-browser checks, with 300 tabs in 12 groups:
 
 ## Development
 
+Run `just` to list every recipe. The main ones:
+
 | Command | Does |
 | --- | --- |
-| `just test` | runs vitest; the fzf parity tests are skipped if `fzf` isn't installed |
-| `just bench` | runs the search benchmark |
-| `just watch chrome` | rebuilds on change, unminified |
-| `just lint-firefox` | runs `web-ext lint` |
-| `just zip` | packages both builds |
+| `just build [chrome\|firefox\|safari]` | builds `dist/<target>`; all three by default |
+| `just watch [target]` | rebuilds one target on change, unminified |
+| `just check` | typecheck, tests, Firefox lint and a full build (what CI should run) |
+| `just test` / `just bench` | vitest (fzf parity tests skip without `fzf`) / per-keystroke search latency |
+| `just run-firefox` | throwaway Firefox profile with fasttab, reloads on rebuild |
+| `just firefox-dev` | your own Firefox: opens `about:debugging` and copies the manifest path for Reload / Load Temporary Add-on |
+| `just run-chrome` | Chrome for Testing on `$FASTTAB_CHROME_HOST` (default JWMB19) with fasttab loaded |
+| `just run-safari` | builds the Safari app and opens it so Safari registers the extension |
+| `just harness [tabs]` | `dist/harness.js`: the real popup with a mocked browser API and fake tabs |
+| `just package` | `fasttab-chrome.zip`, `fasttab-firefox.zip`, `fasttab-safari.zip` (or `package-chrome` / `-firefox` / `-safari`) |
+| `just sign-firefox` | signs an unlisted Firefox build that installs permanently (needs `AMO_JWT_ISSUER` / `AMO_JWT_SECRET`) |
+| `just clean` | removes `dist`, `build` and the zips |
