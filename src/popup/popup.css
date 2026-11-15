@@ -268,6 +268,10 @@ mark {
   font-size: 12px;
   color: var(--muted);
 }
+/* the selected row's ★ ◷ ↺ takes the accent */
+.row.sel .kind {
+  color: var(--sel-bar);
+}
 .badge {
   flex: none;
   font-size: 10.5px;
