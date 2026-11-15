@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "fasttab",
   "version": "0.1.0",
-  "description": "Fast fuzzy tab switcher for many tabs and tab groups. fzf scoring, frecency, instant popup.",
+  "description": "Fast fuzzy switcher for tabs, tab groups, closed tabs, bookmarks and history. Press ⌃K (Alt+K), type a few letters, hit Enter.",
   "action": {
     "default_popup": "popup.html",
     "default_title": "fasttab",
