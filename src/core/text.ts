@@ -98,3 +98,9 @@ export function prettyUrl(url: string): string {
   if (s.endsWith('/')) s = s.slice(0, -1);
   return s.length > 160 ? s.slice(0, 160) : s;
 }
+
+/** "https://www.example.com/x" → "example.com"; '' for non-network urls. */
+export function hostOf(url: string): string {
+  const m = /^[a-z][\w+.-]*:\/\/(?:www\.)?([^/:?#]+)/i.exec(url);
+  return m ? m[1].toLowerCase() : '';
+}

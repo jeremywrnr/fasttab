@@ -27,6 +27,8 @@ for (let i = 0; i < N; i++) {
   const r = { k: 'tab', id: i + 1, title: w + ' #' + i, url: 'https://' + h + '/p/' + i, win: g ? g.windowId : 1 + (i % 3), la: now - i * 60000, fr: rnd() < 0.1 ? rnd() * 20 : undefined };
   if (g) { r.gid = g.id; r.gt = g.title; r.gc = g.color; }
   if (i === 0) { r.act = 1; r.win = 1; }
+  if (i % 7 === 3) r.aud = 1; // some tabs playing audio
+  if (i % 13 === 5) r.pin = 1;
   items.push(r);
 }
 for (const g of groups) { const ts = items.filter(t => t.gid === g.id); items.push({ k: 'group', id: g.id, title: g.title, url: '', win: g.windowId, gc: g.color, n: ts.length, mru: ts[0]?.id, la: ts[0]?.la, col: g.collapsed ? 1 : undefined }); }

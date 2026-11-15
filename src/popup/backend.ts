@@ -39,7 +39,7 @@ export function viaBackground(token: string) {
       (r) => (r ?? fallback) as T,
       () => fallback,
     );
-  const api: Backend & { init(): Promise<{ items: RawItem[]; win: number } | null> } = {
+  const api: Backend & { init(): Promise<{ items: RawItem[]; win: number; favicons?: Record<string, string> } | null> } = {
     init: () => ov({ t: 'ov:init' }, null),
     bookmarks: () => ov({ t: 'ov:bookmarks' }, []),
     recent: () => ov({ t: 'ov:recent' }, []),

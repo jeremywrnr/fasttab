@@ -23,8 +23,6 @@ export interface RawItem {
   col?: 1;
   /** last accessed, ms epoch */
   la?: number;
-  /** favicon url (Firefox only; Chrome uses _favicon) */
-  fav?: string;
   /** frecency, decayed to snapshot time */
   fr?: number;
   /** groups: tab count, most-recent tab id */

@@ -7,6 +7,8 @@ import type { RawItem } from '../core/types.ts';
 
 export const SNAP_TOP = 'ft_top';
 export const SNAP_FULL = 'ft_full';
+/** host → favicon url (Firefox/Safari), kept out of the snapshot and written only on change */
+export const FAVICONS = 'ft_fav';
 export const TOP_N = 30;
 const UNNAMED_GROUP = 'Unnamed group';
 
@@ -19,16 +21,7 @@ export interface Snapshot {
 
 export type GroupInfo = { title?: string; color?: string; collapsed?: boolean; windowId?: number; id: number };
 
-declare const __CHROME__: boolean;
-
 export const hasGroups = (): boolean => typeof chrome !== 'undefined' && !!chrome.tabGroups;
-
-/** Small favicons only: data: URLs can be huge and bloat the snapshot. */
-function favOf(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  if (url.startsWith('data:') && url.length > 4096) return undefined;
-  return url;
-}
 
 export function tabToRaw(
   t: chrome.tabs.Tab,
@@ -54,11 +47,6 @@ export function tabToRaw(
   if (last) r.la = Math.round(last);
   const fr = lookup(frec, url, now);
   if (fr > 0.05) r.fr = Math.round(fr * 100) / 100;
-  // Chrome draws favicons itself (_favicon); Firefox/Safari need the tab's own url.
-  if (!__CHROME__) {
-    const f = favOf(t.favIconUrl);
-    if (f) r.fav = f;
-  }
   return r;
 }
 

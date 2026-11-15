@@ -4,10 +4,12 @@
 // Also records frecency (tab activations with a dwell, plus popup picks).
 
 import { bump, FREC_KEY, prune, type FrecMap } from '../core/frecency.ts';
+import { hostOf } from '../core/text.ts';
 import { COMMAND } from '../shared/shortcut.ts';
 import type { RawItem } from '../core/types.ts';
 import {
   buildRaw,
+  FAVICONS,
   hasGroups,
   SNAP_FULL,
   SNAP_TOP,
@@ -47,7 +49,14 @@ function init(): Promise<void> {
       chrome.storage.local.get(FREC_KEY),
       chrome.windows.getLastFocused().catch(() => undefined),
     ]);
-    for (const t of all) if (t.id !== undefined) tabs.set(t.id, t);
+    if (!__CHROME__) {
+      const prev = (await chrome.storage.session.get(FAVICONS))[FAVICONS] as Record<string, string> | undefined;
+      for (const [h, f] of Object.entries(prev ?? {})) favicons.set(h, f);
+    }
+    for (const t of all) {
+      if (t.id !== undefined) tabs.set(t.id, t);
+      noteFavicon(t);
+    }
     for (const g of gs) groups.set(g.id, g);
     closed = cl;
     frec = (store[FREC_KEY] as FrecMap | undefined) ?? {};
@@ -86,7 +95,32 @@ async function writeSnapshot(): Promise<void> {
   const v = ++seq;
   const full: Snapshot = { v, win: focusedWin, items };
   const top: Snapshot = { v, win: focusedWin, items: topOf(items, focusedWin) };
-  await chrome.storage.session.set({ [SNAP_TOP]: top, [SNAP_FULL]: full });
+  const write: Record<string, unknown> = { [SNAP_TOP]: top, [SNAP_FULL]: full };
+  if (favDirty) {
+    write[FAVICONS] = Object.fromEntries(favicons);
+    favDirty = false;
+  }
+  await chrome.storage.session.set(write);
+}
+
+// ------------------------------------------------------------------ favicons
+// Chrome draws any page's favicon itself (_favicon). Firefox and Safari only
+// hand us each tab's favIconUrl, often a large data: url, so keep one per site
+// and reuse it for that site's bookmarks and history too.
+
+const favicons = new Map<string, string>();
+let favDirty = false;
+const MAX_FAVICONS = 2000;
+
+function noteFavicon(t: chrome.tabs.Tab): void {
+  if (__CHROME__) return;
+  const host = hostOf(t.url ?? '');
+  const f = t.favIconUrl;
+  if (!host || !f || f.length > 256_000 || favicons.get(host) === f) return;
+  favicons.delete(host); // re-insert as newest
+  favicons.set(host, f);
+  if (favicons.size > MAX_FAVICONS) favicons.delete(favicons.keys().next().value!);
+  favDirty = true;
 }
 
 /** Run a state change once the index is loaded, then schedule a snapshot. */
@@ -131,12 +165,14 @@ const RELEVANT = ['title', 'url', 'pinned', 'audible', 'discarded', 'groupId', '
 chrome.tabs.onCreated.addListener(
   on((t: chrome.tabs.Tab) => {
     if (t.id !== undefined) tabs.set(t.id, t);
+    noteFavicon(t);
   }),
 );
 
 chrome.tabs.onUpdated.addListener(
   on((id: number, change: chrome.tabs.OnUpdatedInfo, t: chrome.tabs.Tab) => {
     tabs.set(id, t);
+    noteFavicon(t);
     if (__CHROME__ && 'favIconUrl' in change && Object.keys(change).length <= 2) return false; // Chrome draws favicons itself
     return RELEVANT.some((k) => k in change);
   }),
@@ -232,7 +268,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
         return;
       case 'ov:init': {
         const win = sender.tab?.windowId ?? focusedWin;
-        reply({ items: buildItems(Date.now()), win });
+        reply({ items: buildItems(Date.now()), win, favicons: Object.fromEntries(favicons) });
         return;
       }
       case 'ov:bookmarks':
@@ -317,7 +353,8 @@ function injectOverlay(src: string, origin: string): string {
   const frame = document.createElement('iframe');
   frame.src = src;
   frame.style.cssText =
-    'position:absolute;left:50%;top:16vh;transform:translateX(-50%);width:min(720px,calc(100vw - 16px));height:92px;' +
+    // 80px wider and 24px higher than the panel: the panel's margins hold its shadow.
+    'position:absolute;left:50%;top:calc(16vh - 24px);transform:translateX(-50%);width:min(800px,100vw);height:136px;' +
     'border:0;background:transparent;color-scheme:normal;';
   root.appendChild(frame);
   const prev = document.activeElement as HTMLElement | null;

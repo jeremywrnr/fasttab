@@ -8,7 +8,13 @@ export interface Row {
   t: HTMLDivElement;
   u: HTMLDivElement;
   chip: HTMLSpanElement;
+  /** animated equalizer while the tab plays audio */
+  eq: HTMLSpanElement;
   badge: HTMLSpanElement;
+  /** "other window" pill */
+  win: HTMLSpanElement;
+  /** ★ ◷ ↺ for bookmark / history / closed */
+  kind: HTMLSpanElement;
   /** render signature; skip work when unchanged */
   sig: string;
   idx: number;
@@ -40,10 +46,19 @@ function makeRow(): Row {
   txt.append(t, u);
   const chip = document.createElement('span');
   chip.className = 'chip';
+  const eq = document.createElement('span');
+  eq.className = 'eq';
+  eq.title = 'Playing audio';
+  eq.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
   const badge = document.createElement('span');
   badge.className = 'badge';
-  el.append(fav, dot, txt, chip, badge);
-  return { el, fav, dot, t, u, chip, badge, sig: '', idx: -1 };
+  const win = document.createElement('span');
+  win.className = 'win';
+  win.textContent = '⧉ other window';
+  const kind = document.createElement('span');
+  kind.className = 'kind';
+  el.append(fav, dot, txt, chip, eq, badge, win, kind);
+  return { el, fav, dot, t, u, chip, eq, badge, win, kind, sig: '', idx: -1 };
 }
 
 export class VList {

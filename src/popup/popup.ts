@@ -11,7 +11,8 @@ import { parseQuery } from '../core/query.ts';
 import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
 import type { Item, RawItem } from '../core/types.ts';
 import { actionLabel, recentlyClosed } from '../shared/actions.ts';
-import { buildRaw, hasGroups, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
+import { buildRaw, FAVICONS, hasGroups, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
+import { hostOf } from '../core/text.ts';
 import { DEFAULT_SHORTCUT, prettyShortcut, shortcutMatcher } from '../shared/shortcut.ts';
 import { direct, send, viaBackground, type Backend } from './backend.ts';
 import { VList, type Row } from './vlist.ts';
@@ -78,7 +79,8 @@ function layout(): void {
   $inner.parentElement!.style.height = n ? Math.min(n, MAX_ROWS) * list.rowH + 'px' : '';
   $empty.hidden = n > 0 || !fullLoaded;
   if (OVERLAY) {
-    const h = Math.ceil($panel.getBoundingClientRect().height) + 6 + 28; // panel margins
+    // panel bottom (includes its top margin) plus its bottom margin, which holds the shadow
+    const h = Math.ceil($panel.getBoundingClientRect().bottom + parseFloat(getComputedStyle($panel).marginBottom));
     if (h !== lastH) {
       lastH = h;
       parent.postMessage({ ft: 'size', h }, '*');
@@ -89,10 +91,18 @@ function layout(): void {
 // ------------------------------------------------------------------ rendering
 
 const faviconBase = __CHROME__ ? chrome.runtime.getURL('/_favicon/') : '';
+/** Firefox/Safari: host → favicon url, collected by the background from open tabs. */
+let favicons = new Map<string, string>();
+let favVer = 0;
+function setFavicons(obj: Record<string, string> | undefined): void {
+  if (!obj) return;
+  favicons = new Map(Object.entries(obj));
+  favVer++;
+}
 function faviconFor(it: Item): string {
-  if (!__CHROME__) return it.fav ?? ''; // Firefox/Safari: the tab's own favicon url
-  if (!it.url) return '';
-  return `${faviconBase}?pageUrl=${encodeURIComponent(it.url)}&size=32`;
+  if (!it.url || it.k === 'group') return '';
+  if (__CHROME__) return `${faviconBase}?pageUrl=${encodeURIComponent(it.url)}&size=32`;
+  return favicons.get(hostOf(it.url)) ?? '';
 }
 
 /** Append text with <mark> runs for positions in [off, off + text.length). */
@@ -129,25 +139,14 @@ function highlight(el: HTMLElement, text: string, off: number, pos: number[]): v
 }
 
 function badgeFor(it: Item): string {
-  switch (it.k) {
-    case 'tab': {
-      const b: string[] = [];
-      if (it.pin) b.push('pinned');
-      if (it.aud) b.push('♪');
-      if (it.disc) b.push('asleep');
-      if (it.win !== s.context.win) b.push('other window');
-      return b.join(' · ');
-    }
-    case 'group':
-      return `${it.n} tab${it.n === 1 ? '' : 's'}${it.col ? ' · collapsed' : ''}`;
-    default:
-      return ''; // the glyph says it
-  }
+  if (it.k === 'group') return `${it.n} tab${it.n === 1 ? '' : 's'}${it.col ? ' · collapsed' : ''}`;
+  if (it.k !== 'tab') return '';
+  return [it.pin && 'pinned', it.disc && 'asleep'].filter(Boolean).join(' · ');
 }
 
-// Non-tab results get a glyph in the icon column and are dimmed, so open tabs
-// stand out at a glance.
-const GLYPH: Partial<Record<Item['k'], [string, string]>> = {
+// Bookmarks, history and closed tabs are dimmed (their favicons grayscale
+// until selected) and marked at the right edge, so open tabs read first.
+const KIND_MARK: Partial<Record<Item['k'], [string, string]>> = {
   bookmark: ['★', 'Bookmark'],
   history: ['◷', 'History'],
   closed: ['↺', 'Recently closed'],
@@ -156,22 +155,19 @@ const GLYPH: Partial<Record<Item['k'], [string, string]>> = {
 function renderRow(row: Row, i: number): void {
   if (!res) return;
   const it = at(res, i);
-  const sig = `${it.key}|${it.ord}|${res.q.raw}|${it.title}|${it.gt}|${it.col}`;
+  const sig = `${it.key}|${it.ord}|${res.q.raw}|${it.title}|${it.gt}|${it.col}|${it.aud}|${favVer}`;
   row.el.classList.toggle('sel', i === sel);
   if (row.sig === sig) return;
   row.sig = sig;
   const pos = res.q.groups.length ? positionsFor(it, res.q) : [];
   row.el.className = 'row k-' + it.k + (i === sel ? ' sel' : '');
-  // icon column: favicon for tabs, group colour, or a kind glyph; always occupies its slot
-  const glyph = GLYPH[it.k];
-  let src = it.k === 'tab' ? faviconFor(it) : '';
-  if (src && row.fav.dataset.failed === src) src = ''; // known-broken favicon: use the neutral icon
+  // Icon column: a group's colour, else the favicon, else nothing (the slot keeps its width).
+  let src = faviconFor(it);
+  if (src && row.fav.dataset.failed === src) src = '';
   row.fav.hidden = !src;
   if (src && row.fav.getAttribute('src') !== src) row.fav.src = src;
+  row.dot.className = it.k === 'group' ? 'ico dot' : 'ico';
   row.dot.hidden = !!src;
-  row.dot.className = it.k === 'group' ? 'ico dot' : glyph ? 'ico glyph' : 'ico live';
-  row.dot.textContent = glyph ? glyph[0] : '';
-  row.dot.title = glyph ? glyph[1] : '';
   if (it.k === 'group') row.dot.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
   highlight(row.t, it.title, 0, pos);
   // the url as shown is already in the haystack (prepare), between uOff and the group
@@ -186,6 +182,12 @@ function renderRow(row: Row, i: number): void {
   const b = badgeFor(it);
   row.badge.hidden = !b;
   row.badge.textContent = b;
+  row.eq.hidden = !(it.k === 'tab' && it.aud);
+  row.win.hidden = !(it.k === 'tab' && it.win !== s.context.win);
+  const mark = KIND_MARK[it.k];
+  row.kind.hidden = !mark;
+  row.kind.textContent = mark?.[0] ?? '';
+  row.kind.title = mark?.[1] ?? '';
 }
 
 const list = new VList($scroller, $inner, renderRow, (i, e) => {
@@ -375,12 +377,14 @@ if (overlayApi) {
   void overlayApi.init().then((r) => {
     if (!r) return;
     fullLoaded = true;
+    setFavicons(r.favicons);
     setBase(r.items, r.win);
     afterBase();
   });
 } else {
   // Stage 1 + 2 run in parallel; the small key usually resolves first.
   void chrome.storage.session.get(SNAP_TOP).then((r) => applySnapshot(r[SNAP_TOP] as Snapshot | undefined, false));
+  if (!__CHROME__) void chrome.storage.session.get(FAVICONS).then((r) => (setFavicons(r[FAVICONS] as Record<string, string>), list.draw()));
   void chrome.storage.session.get(SNAP_FULL).then((r) => {
     const sn = r[SNAP_FULL] as Snapshot | undefined;
     if (sn) applySnapshot(sn, true);
@@ -398,8 +402,12 @@ if (overlayApi) {
   });
   // Live updates while the popup is open (tab closed elsewhere, title changes).
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'session' || !changes[SNAP_FULL]) return;
-    applySnapshot(changes[SNAP_FULL].newValue as Snapshot | undefined, true);
+    if (area !== 'session') return;
+    if (changes[FAVICONS]) {
+      setFavicons(changes[FAVICONS].newValue as Record<string, string>);
+      list.draw();
+    }
+    if (changes[SNAP_FULL]) applySnapshot(changes[SNAP_FULL].newValue as Snapshot | undefined, true);
   });
 }
 
