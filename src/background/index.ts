@@ -17,6 +17,7 @@ import {
   type Snapshot,
 } from '../shared/raw.ts';
 import type { Msg } from '../shared/messages.ts';
+import { captureEnabled, SHORTCUT_KEY, syncCapture } from '../shared/capture.ts';
 import { currentShortcut, loadBookmarks, loadRecentHistory, openShortcutSettings, performAction, searchHistory } from '../shared/actions.ts';
 
 declare const __FIREFOX__: boolean;
@@ -219,6 +220,11 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
   }
   void init().then(async () => {
     switch (msg.t) {
+      case 'hotkey':
+        // From the opt-in page listener: only honoured while the setting is on.
+        if (__FIREFOX__ && (await captureEnabled())) openSwitcher(sender.tab);
+        reply(true);
+        return;
       case 'hello':
         // A popup opened: make sure the snapshot it reads is current.
         if (timer) await writeSnapshot();
@@ -355,7 +361,10 @@ async function popupWindowFallback(): Promise<void> {
 }
 
 chrome.commands.onCommand.addListener((cmd, tab) => {
-  if (cmd !== 'open-switcher') return;
+  if (cmd === 'open-switcher') openSwitcher(tab);
+});
+
+function openSwitcher(tab: chrome.tabs.Tab | undefined): void {
   if (!tab?.id || !injectable(tab.url)) {
     // Must stay synchronous: openPopup needs the shortcut's user action.
     chrome.action.openPopup().catch(() => void popupWindowFallback());
@@ -372,4 +381,14 @@ chrome.commands.onCommand.addListener((cmd, tab) => {
       overlayTokens.delete(token);
       return popupWindowFallback();
     });
-});
+}
+
+// The page-level hotkey listener (opt-in, see shared/capture.ts) needs to know
+// the current shortcut; content scripts can't read commands themselves.
+async function syncShortcut(): Promise<void> {
+  const sc = await currentShortcut();
+  await chrome.storage.local.set({ [SHORTCUT_KEY]: sc });
+}
+(chrome.commands as { onChanged?: chrome.events.Event<() => void> }).onChanged?.addListener(() => void syncShortcut());
+void syncShortcut();
+if (__FIREFOX__) void syncCapture();

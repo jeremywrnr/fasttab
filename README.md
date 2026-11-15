@@ -18,6 +18,8 @@ just build          # dist/chrome and dist/firefox
 
 The default is **⌃K** on macOS and **Alt+K** on Windows/Linux, in both Chrome and Firefox. Ctrl+K isn't the default off macOS because there both browsers use it for web search: Chrome refuses browser keys as an extension default (it did the same with ⌘P), which would leave fasttab with no shortcut. In Chrome you can still bind Ctrl+K yourself at `chrome://extensions/shortcuts`, and a key you set there takes priority over the browser's own. If another extension already holds the key, fasttab is left without a shortcut. Its options page (and the footer link in the popup) open the shortcut settings so you can pick another key.
 
+**Sites that grab the shortcut (Firefox).** Some pages handle the key themselves and stop it before the browser sees it. In Google Docs, ⌃K deletes to the end of the line, and Firefox gives you no setting to stop that for extension shortcuts. fasttab's options page has an opt-in **Capture the shortcut on every page** switch. It asks for access to all websites, then adds a tiny listener to every page and frame at load. The listener catches only the fasttab shortcut, before the site's own code runs, and opens fasttab. With the switch off, nothing runs in pages until you press the shortcut.
+
 You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:addons` → Manage Extension Shortcuts). Chrome won't let an extension claim **⌘P** as its default, but a ⌘P you set there does take priority over Print, which was checked on Chrome 156.
 
 ## Using it

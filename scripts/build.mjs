@@ -20,8 +20,10 @@ function manifest(target) {
     m.minimum_chrome_version = '127'; // action.openPopup()
   } else {
     m.background = { scripts: ['background.js'] };
+    // Opt-in "capture the shortcut on every page" (options page) asks for this at that moment.
+    m.optional_host_permissions = ['<all_urls>'];
     m.browser_specific_settings = {
-      gecko: { id: 'fasttab@jeremywrnr', strict_min_version: '128.0', data_collection_permissions: { required: ['none'] } },
+      gecko: { id: 'fasttab@jeremywrnr', strict_min_version: '140.0', data_collection_permissions: { required: ['none'] } },
     };
   }
   return m;
@@ -48,7 +50,7 @@ for (const target of targets) {
   const out = join(root, 'dist', target);
   rmSync(out, { recursive: true, force: true });
   const opts = {
-    entryPoints: { background: join(root, 'src/background/index.ts'), popup: join(root, 'src/popup/popup.ts'), welcome: join(root, 'src/welcome/welcome.ts') },
+    entryPoints: { background: join(root, 'src/background/index.ts'), popup: join(root, 'src/popup/popup.ts'), welcome: join(root, 'src/welcome/welcome.ts'), hotkey: join(root, 'src/hotkey/hotkey.ts') },
     outdir: out,
     bundle: true,
     format: 'iife',

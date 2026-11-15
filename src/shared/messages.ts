@@ -2,6 +2,7 @@ import type { ActItem } from './actions.ts';
 
 export type Msg =
   | { t: 'hello' }
+  | { t: 'hotkey' }
   | { t: 'visit'; url: string }
   // Overlay frame → background. Every request carries the overlay's one-time token.
   | { t: 'ov:init'; token: string }

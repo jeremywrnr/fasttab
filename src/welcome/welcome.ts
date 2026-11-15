@@ -2,11 +2,12 @@
 // shortcut even when the suggested key is active, so always offer the
 // settings link rather than trusting the reported value.
 
+import { captureEnabled, disableCapture, enableCapture } from '../shared/capture.ts';
+
 declare const __FIREFOX__: boolean;
 
 const $current = document.getElementById('current')!;
 const $ok = document.getElementById('ok')!;
-const $steps = document.getElementById('steps')!;
 const $why = document.getElementById('why')!;
 const $list = document.getElementById('list')!;
 
@@ -38,3 +39,16 @@ document.addEventListener('visibilitychange', () => void check());
 window.addEventListener('focus', () => void check());
 setInterval(() => void check(), 2000);
 void check();
+
+// Firefox only: Chrome runs extension shortcuts before the page can swallow them.
+if (__FIREFOX__) {
+  const $card = document.getElementById('capture-card')!;
+  const $box = document.getElementById('capture') as HTMLInputElement;
+  $card.hidden = false;
+  void captureEnabled().then((on) => ($box.checked = on));
+  $box.addEventListener('change', async () => {
+    // permissions.request must run straight from the click, before any await.
+    if ($box.checked) $box.checked = await enableCapture();
+    else await disableCapture();
+  });
+}

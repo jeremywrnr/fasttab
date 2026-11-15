@@ -18,6 +18,8 @@
       li { margin: 4px 0; }
       button { font: inherit; background: var(--accent); color: var(--bg); border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
       .done { color: var(--ok); font-weight: 600; }
+      .toggle { display: flex; gap: 10px; align-items: center; font-weight: 600; cursor: pointer; }
+      .small { font-size: 13px; margin: 10px 0 0; }
       [hidden] { display: none !important; }
     </style>
   </head>
@@ -32,6 +34,10 @@
           <ol id="list"></ol>
           <button id="open">Open shortcut settings</button>
         </div>
+      </div>
+      <div class="card" id="capture-card" hidden>
+        <label class="toggle"><input type="checkbox" id="capture" /> Capture the shortcut on every page</label>
+        <p class="small">Some sites keep the shortcut for themselves: <kbd>⌃K</kbd> deletes to the end of the line in Google Docs, and editors like Figma or VS Code for the Web grab keys too. With this on, fasttab listens for its shortcut inside every page and frame, and opens before the site sees the key. Firefox will ask for access to all websites; the listener only watches for this one key combination and sends nothing anywhere.</p>
       </div>
       <p>Search syntax: <kbd>g:</kbd> groups, <kbd>w:</kbd> this window, <kbd>c:</kbd> recently closed, <kbd>b:</kbd> bookmarks, <kbd>h:</kbd> history. fzf operators work too: <kbd>'exact</kbd> <kbd>^prefix</kbd> <kbd>suffix$</kbd> <kbd>!not</kbd>.</p>
     </main>
