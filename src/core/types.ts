@@ -13,6 +13,8 @@ export interface RawItem {
   gid?: number;
   gt?: string;
   gc?: string;
+  /** bookmark folder chip hue, from the folder's full path */
+  gh?: number;
   /** active in its window */
   act?: 1;
   pin?: 1;
