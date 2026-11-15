@@ -30,6 +30,10 @@ const GROUP_COLORS: Record<string, string> = {
   cyan: '#007b83',
   orange: '#fa903e',
 };
+/** Tab groups use their browser color; bookmark folders a hue from their path (see flattenBookmarks). */
+function chipColor(it: Item): string {
+  return it.gh !== undefined ? `hsl(${it.gh} 55% var(--folder-l))` : (GROUP_COLORS[it.gc ?? ''] ?? '#888');
+}
 const HISTORY_LIVE_DEBOUNCE = 120;
 
 const $q = document.getElementById('q') as HTMLInputElement;
@@ -176,7 +180,7 @@ function renderRow(row: Row, i: number): void {
   // "past": bookmarks, history, closed. Dimmed, grayscale favicon until selected.
   row.el.className = 'row k-' + it.k + (mark ? ' past' : '') + (i === sel ? ' sel' : '');
   row.dot.classList.toggle('dot', it.k === 'group');
-  if (it.k === 'group') row.dot.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
+  if (it.k === 'group') row.dot.style.setProperty('--c', chipColor(it));
   highlight(row.t, it.title, 0, pos);
   // Only the site is shown (plan.io); search still matches the whole url in the haystack.
   const [site, siteOff] = siteOf(it);
@@ -185,11 +189,7 @@ function renderRow(row: Row, i: number): void {
   if (it.gt && it.k !== 'group') {
     row.chip.hidden = false;
     highlight(row.chip, it.gt, it.gOff, pos);
-    // tab groups use their browser color; bookmark folders a hue from their path
-    row.chip.style.setProperty(
-      '--c',
-      it.gh !== undefined ? `hsl(${it.gh} 55% var(--folder-l))` : (GROUP_COLORS[it.gc ?? ''] ?? '#888'),
-    );
+    row.chip.style.setProperty('--c', chipColor(it));
   } else row.chip.hidden = true;
   const b = badgeFor(it);
   row.badge.hidden = !b;
