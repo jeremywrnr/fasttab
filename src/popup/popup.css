@@ -8,7 +8,8 @@
   --mark: #1a73e8;
   --chip-fg: #ffffff;
   --row-h: 32px;
-  --dim: 0.62;
+  --dim: 0.4;
+  --dim-sel: 0.75;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -169,16 +170,17 @@ html.overlay .panel {
   color: var(--muted);
   font-size: 11.5px;
 }
-/* bookmarks, history, closed: recede so open tabs read first */
-.row.k-bookmark .t,
-.row.k-history .t,
-.row.k-closed .t {
+/* bookmarks, history, closed: the whole row recedes so open tabs read first;
+   it comes back up enough to read when selected */
+.row.k-bookmark > *,
+.row.k-history > *,
+.row.k-closed > * {
   opacity: var(--dim);
 }
-.row.k-bookmark .chip,
-.row.k-history .chip,
-.row.k-closed .chip {
-  opacity: 0.7;
+.row.sel.k-bookmark > *,
+.row.sel.k-history > *,
+.row.sel.k-closed > * {
+  opacity: var(--dim-sel);
 }
 .row.k-tab .t {
   font-weight: 500;
