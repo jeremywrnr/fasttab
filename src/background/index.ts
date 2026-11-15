@@ -295,7 +295,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
         reply(true);
         return;
       case 'ov:act': {
-        const url = await performAction(msg.it, msg.win, msg.newWindow).catch(() => undefined);
+        const url = await performAction(msg.it, msg.win, msg.alt).catch(() => undefined);
         if (url) visit(url);
         reply(true);
         return;

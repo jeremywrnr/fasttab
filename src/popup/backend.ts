@@ -17,7 +17,8 @@ export interface Backend {
   favicons(): Promise<FaviconMap>;
   /** fasttab's own settings page */
   openSettings(): void;
-  act(it: ActItem, win: number, newWindow: boolean): Promise<void>;
+  /** ↵ (or ⇧↵ with `alt`) on an item */
+  act(it: ActItem, win: number, alt: boolean): Promise<void>;
 }
 
 export const send = (m: Msg): Promise<unknown> => chrome.runtime.sendMessage(m).catch(() => undefined);
@@ -29,8 +30,8 @@ export const direct: Backend = {
   shortcut: currentShortcut,
   favicons: () => chrome.storage.session.get(FAVICONS).then((r) => (r[FAVICONS] as FaviconMap | undefined) ?? {}, () => ({})),
   openSettings: () => void chrome.runtime.openOptionsPage(),
-  async act(it, win, newWindow) {
-    const url = await performAction(it, win, newWindow).catch(() => undefined);
+  async act(it, win, alt) {
+    const url = await performAction(it, win, alt).catch(() => undefined);
     if (url) void send({ t: 'visit', url });
   },
 };
@@ -51,7 +52,7 @@ export function viaBackground(token: string) {
     shortcut: () => ov({ t: 'ov:shortcut' }, ''),
     favicons: () => ov<FaviconMap>({ t: 'ov:favicons' }, {}),
     openSettings: () => void ov({ t: 'ov:settings' }, true),
-    act: (it, win, newWindow) => ov({ t: 'ov:act', it, win, newWindow }, true).then(() => undefined),
+    act: (it, win, alt) => ov({ t: 'ov:act', it, win, alt }, true).then(() => undefined),
   };
   return api;
 }

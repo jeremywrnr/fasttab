@@ -33,11 +33,11 @@ You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:ad
 | --- | --- |
 | type | fuzzy search (fzf syntax) |
 | ↑ ↓ | move |
-| ↵ | switch to the tab, open the group, reopen a closed tab, or open a bookmark / page in a new tab (the footer says which) |
-| ⇧↵ | the same in a new window (a tab or group moves there) |
+| ↵ | **Jump** to an open tab or group; **Open** a closed tab, bookmark or page (in a new tab) |
+| ⇧↵ | **Clone** an open tab (duplicate it); move a group, or open anything else, in a new **Window** |
 | Esc, ⌃K again, or click outside | close |
 
-The footer shows **↵ Jump** (open tab) or **↵ Open** (anything else), **⇧↵ New window**, and the shortcut, which opens fasttab's settings. With an empty query, the right end of the search bar shows ↵ and the favicon of the tab it will jump to.
+The footer names what ↵ and ⇧↵ will do for the selected row (Jump / Clone for open tabs, Open / Window for the rest) and shows the shortcut, which opens fasttab's settings. Rows show just the site (`plan.io`); search still matches the whole url. With an empty query, the right end of the search bar shows ↵ and the favicon of the tab it will jump to.
 
 **Minimal first:** only the search bar shows until you type. **⌃K then ↵** switches to your previous tab, like alt-tab. A leading space (or ↓) lists every open tab, most recent first.
 

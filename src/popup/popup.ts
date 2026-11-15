@@ -10,9 +10,9 @@ import { keyOf, SEP } from '../core/prepare.ts';
 import { parseQuery } from '../core/query.ts';
 import { at, positionsFor, Searcher, type Result } from '../core/search.ts';
 import type { Item, RawItem } from '../core/types.ts';
-import { actionLabel, recentlyClosed } from '../shared/actions.ts';
+import { actionLabels, recentlyClosed } from '../shared/actions.ts';
 import { buildRaw, FAVICONS, hasGroups, type FaviconMap, SNAP_FULL, SNAP_TOP, type GroupInfo, type Snapshot } from '../shared/raw.ts';
-import { hostOf } from '../core/text.ts';
+import { hostOf, rootDomain } from '../core/text.ts';
 import { DEFAULT_SHORTCUT, prettyShortcut, shortcutMatcher } from '../shared/shortcut.ts';
 import { direct, send, viaBackground, type Backend } from './backend.ts';
 import { iconImg, setIcon, VList, type Row } from './vlist.ts';
@@ -37,6 +37,7 @@ const $scroller = document.getElementById('scroller')!;
 const $inner = document.getElementById('inner')!;
 const $empty = document.getElementById('empty')!;
 const $act = document.getElementById('act')!;
+const $alt = document.getElementById('alt')!;
 const $next = document.getElementById('next')!;
 const $nextIcon = iconImg(document.getElementById('next-icon') as HTMLImageElement);
 const $shortcut = document.getElementById('shortcut') as HTMLAnchorElement;
@@ -160,6 +161,25 @@ const KIND_MARK: Partial<Record<Item['k'], [string, string]>> = {
   closed: ['↺', 'Recently closed'],
 };
 
+/**
+ * What the url column shows: the root domain for web pages, a short form for
+ * the rest. Returns the text and its offset in the haystack (for highlights),
+ * or -1 when it isn't a substring of it.
+ */
+function siteOf(it: Item): [string, number] {
+  if (it.uOff < 0) return ['', -1];
+  if (/^(moz|chrome|safari-web)-extension:/.test(it.url)) return ['extension', -1];
+  const host = hostOf(it.url);
+  if (host) {
+    const site = rootDomain(host);
+    const end = it.gOff >= 0 ? it.gOff - SEP.length : it.hay.length;
+    const at = it.hay.lastIndexOf(site, end);
+    return [site, at >= it.uOff ? at : -1];
+  }
+  const short = /^[a-z-]+:(?:\/\/)?[^/?#]*/i.exec(it.url)?.[0] ?? it.url;
+  return [short, it.hay.indexOf(short, it.uOff) === it.uOff ? it.uOff : -1];
+}
+
 function renderRow(row: Row, i: number): void {
   if (!res) return;
   const it = at(res, i);
@@ -177,10 +197,10 @@ function renderRow(row: Row, i: number): void {
   row.dot.classList.toggle('dot', it.k === 'group');
   if (it.k === 'group') row.dot.style.setProperty('--c', GROUP_COLORS[it.gc ?? ''] ?? '#888');
   highlight(row.t, it.title, 0, pos);
-  // the url as shown is already in the haystack (prepare), between uOff and the group
-  const disp = it.uOff >= 0 ? it.hay.slice(it.uOff, it.gOff >= 0 ? it.gOff - SEP.length : undefined) : '';
-  if (it.uOff >= 0) highlight(row.u, disp, it.uOff, pos);
-  else row.u.textContent = it.k === 'group' ? 'tab group' : '';
+  // Only the site is shown (plan.io); search still matches the whole url in the haystack.
+  const [site, siteOff] = siteOf(it);
+  if (siteOff >= 0) highlight(row.u, site, siteOff, pos);
+  else row.u.textContent = it.k === 'group' ? 'tab group' : site;
   if (it.gt && it.k !== 'group') {
     row.chip.hidden = false;
     highlight(row.chip, it.gt, it.gOff, pos);
@@ -210,8 +230,9 @@ list.onHover = (i) => {
 /** Draw rows and say in the footer what ↵ does for the selected one. */
 function redraw(): void {
   list.draw();
-  const label = res && sel < count() ? actionLabel(at(res, sel)) : '';
-  if ($act.textContent !== label) $act.textContent = label;
+  const [enter, alt] = res && sel < count() ? actionLabels(at(res, sel)) : ['', ''];
+  if ($act.textContent !== enter) $act.textContent = enter;
+  if ($alt.textContent !== alt) $alt.textContent = alt;
 }
 
 function count(): number {
@@ -252,12 +273,12 @@ function move(d: number): void {
 
 // ------------------------------------------------------------------ actions
 
-async function activate(newWindow: boolean): Promise<void> {
+async function activate(alt: boolean): Promise<void> {
   if (!res || sel >= count()) return;
   const it = at(res, sel);
   // A group opens its most recent tab; credit that page.
   const url = it.k === 'group' ? (s.get(keyOf({ k: 'tab', id: it.mru ?? -1 } as RawItem))?.url ?? '') : it.url;
-  await api.act({ k: it.k, id: it.id, win: it.win, mru: it.mru, col: it.col, url }, s.context.win, newWindow);
+  await api.act({ k: it.k, id: it.id, win: it.win, mru: it.mru, col: it.col, url }, s.context.win, alt);
   dismiss();
 }
 

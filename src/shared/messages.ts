@@ -12,4 +12,4 @@ export type Msg =
   | { t: 'ov:shortcut'; token: string }
   | { t: 'ov:favicons'; token: string }
   | { t: 'ov:settings'; token: string }
-  | { t: 'ov:act'; token: string; it: ActItem; win: number; newWindow: boolean };
+  | { t: 'ov:act'; token: string; it: ActItem; win: number; alt: boolean };

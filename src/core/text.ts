@@ -104,3 +104,20 @@ export function hostOf(url: string): string {
   const m = /^[a-z][\w+.-]*:\/\/(?:www\.)?([^/:?#]+)/i.exec(url);
   return m ? m[1].toLowerCase() : '';
 }
+
+// Second-level labels that pair with a 2-letter country code (example.co.uk),
+// and hosting suffixes where the subdomain is the actual site (you.github.io).
+const CC_SECOND = new Set(['co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'or', 'ne', 'go']);
+const SHARED_HOSTS = new Set([
+  'github.io', 'gitlab.io', 'vercel.app', 'netlify.app', 'pages.dev', 'web.app', 'firebaseapp.com',
+  'herokuapp.com', 'blogspot.com', 'substack.com', 'notion.site', 'wordpress.com', 'fly.dev', 'onrender.com',
+]);
+
+/** "app.plan.io" → "plan.io", "news.bbc.co.uk" → "bbc.co.uk", "you.github.io" stays. */
+export function rootDomain(host: string): string {
+  const p = host.split('.');
+  if (p.length <= 2 || /^[\d.]+$/.test(host)) return host;
+  const last2 = p.slice(-2).join('.');
+  const take = SHARED_HOSTS.has(last2) || (p[p.length - 1].length === 2 && CC_SECOND.has(p[p.length - 2])) ? 3 : 2;
+  return p.slice(-take).join('.');
+}

@@ -194,6 +194,10 @@ html.overlay .panel {
 .row.k-tab .t {
   font-weight: 500;
 }
+/* the selected (or hovered) row reads in bold */
+.row.sel .t {
+  font-weight: 700;
+}
 mark {
   background: none;
   color: var(--mark);
@@ -299,10 +303,11 @@ mark {
   display: flex;
   gap: 14px;
 }
-/* fixed width so "⇧↵ New window" never shifts as the label changes */
-#act {
+/* fixed widths so the footer never shifts as the labels change */
+#act,
+#alt {
   display: inline-block;
-  width: 3em;
+  width: 3.8em;
 }
 #shortcut {
   color: inherit;

@@ -11,26 +11,30 @@ export type ActItem = Pick<RawItem, 'k' | 'id' | 'win' | 'mru' | 'col' | 'url'>;
 export const HISTORY_RECENT_DAYS = 30;
 export const HISTORY_RECENT_MAX = 1500;
 
-/** What ↵ does, for the switcher's footer: jump to an open tab, open anything else. */
-export function actionLabel(it: Pick<RawItem, 'k'>): string {
-  return it.k === 'tab' ? 'Jump' : 'Open';
+/** Footer labels for ↵ and ⇧↵: open tabs jump/clone, groups jump/window, the rest open/window. */
+export function actionLabels(it: Pick<RawItem, 'k'>): [string, string] {
+  if (it.k === 'tab') return ['Jump', 'Clone'];
+  if (it.k === 'group') return ['Jump', 'Window'];
+  return ['Open', 'Window'];
 }
 
 /**
- * ↵ switches to / opens the item; ⇧↵ (`newWindow`) puts it in a new window
- * instead (a tab or group moves there). `ctxWin` is the window the switcher
- * was opened in. Returns the url to credit with a frecency visit, if any.
+ * ↵ jumps to / opens the item. ⇧↵ (`alt`) clones an open tab next to itself,
+ * moves a group to a new window, and opens anything else in a new window.
+ * `ctxWin` is the window the switcher was opened in. Returns the url to
+ * credit with a frecency visit, if any.
  */
-export async function performAction(it: ActItem, ctxWin: number, newWindow: boolean): Promise<string | undefined> {
+export async function performAction(it: ActItem, ctxWin: number, alt: boolean): Promise<string | undefined> {
+  const newWindow = alt;
   switch (it.k) {
     case 'tab': {
-      if (newWindow) {
-        await chrome.windows.create({ tabId: it.id as number, focused: true });
-        return it.url;
-      }
-      const p = chrome.tabs.update(it.id as number, { active: true });
       if (it.win !== ctxWin && it.win !== undefined) await chrome.windows.update(it.win, { focused: true });
-      await p;
+      if (alt) {
+        const copy = await chrome.tabs.duplicate(it.id as number);
+        if (copy?.id !== undefined) await chrome.tabs.update(copy.id, { active: true });
+      } else {
+        await chrome.tabs.update(it.id as number, { active: true });
+      }
       return it.url;
     }
     case 'group': {
