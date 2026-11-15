@@ -39,7 +39,7 @@ You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:ad
 | ⌘⌫ | close the selected tab and stay in the switcher |
 | Esc, ⌃K again, or click outside | close |
 
-**Minimal first:** only the search bar shows until you type, with a hint of where ↵ goes. **⌃K then ↵** switches to your previous tab, like alt-tab. ↓ on an empty query shows the recent-tabs list.
+**Minimal first:** only the search bar shows until you type, with a hint of where ↵ goes. **⌃K then ↵** switches to your previous tab, like alt-tab. A leading **space** (or ↓) lists every open tab, most recent first.
 
 **Query syntax** follows fzf:
 

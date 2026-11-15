@@ -65,9 +65,12 @@ function dismiss(): void {
   else window.close();
 }
 
-/** Minimal first: only the input until there is a query or ↓ is pressed. */
+/**
+ * Minimal first: only the input until you type or press ↓. A leading space
+ * counts as typing: on its own it lists every open tab, most recent first.
+ */
 let expanded = false;
-const showList = () => expanded || $q.value.trim().length > 0;
+const showList = () => expanded || $q.value.length > 0;
 
 let lastH = 0;
 function layout(): void {
