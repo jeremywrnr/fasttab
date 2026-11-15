@@ -1,8 +1,8 @@
 # fasttab
 
-A fast, keyboard-first tab switcher for Chrome and Firefox, built for hundreds or thousands of tabs across many tab groups. Inspired by [omni](https://github.com/alyssaxuu/omni) and Alfred: press **⌥K** and a single search bar floats near the top-center of the page; results appear as you type.
+A fast, keyboard-first tab switcher for Chrome and Firefox, built for hundreds or thousands of tabs across many tab groups. Inspired by [omni](https://github.com/alyssaxuu/omni) and Alfred: press **⌃K** (Control-K; Alt+K on Windows/Linux) and a single search bar floats near the top-center of the page; results appear as you type.
 
-**How it opens.** ⌥K injects a small transparent frame into the current page, only when pressed: no content script runs on pages otherwise, and the `activeTab` + `scripting` permissions carry no install-time warning. The frame is the extension's own page, so the site can't read it. Data and actions go through the background worker, and every request carries a one-time token, so a page that frames fasttab itself gets nothing. Where browsers forbid injection (new tab, `about:`/`chrome://` pages, the add-on stores) ⌥K opens the same UI as the toolbar popup.
+**How it opens.** The shortcut injects a small transparent frame into the current page, only when pressed: no content script runs on pages otherwise, and the `activeTab` + `scripting` permissions carry no install-time warning. The frame is the extension's own page, so the site can't read it. Data and actions go through the background worker, and every request carries a one-time token, so a page that frames fasttab itself gets nothing. Where browsers forbid injection (new tab, `about:`/`chrome://` pages, the add-on stores) it opens the same UI as the toolbar popup.
 
 ## Install (dev)
 
@@ -16,7 +16,7 @@ just build          # dist/chrome and dist/firefox
 
 ## Shortcut
 
-The default is **⌥K** (Alt+K) in both Chrome and Firefox. If another extension already holds ⌥K, fasttab is left without a shortcut. Its options page (and the footer link in the popup) open the shortcut settings so you can pick another key.
+The default is **⌃K** on macOS and **Alt+K** on Windows/Linux, in both Chrome and Firefox. Ctrl+K isn't the default off macOS because there both browsers use it for web search: Chrome refuses browser keys as an extension default (it did the same with ⌘P), which would leave fasttab with no shortcut. In Chrome you can still bind Ctrl+K yourself at `chrome://extensions/shortcuts`, and a key you set there takes priority over the browser's own. If another extension already holds the key, fasttab is left without a shortcut. Its options page (and the footer link in the popup) open the shortcut settings so you can pick another key.
 
 You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:addons` → Manage Extension Shortcuts). Chrome won't let an extension claim **⌘P** as its default, but a ⌘P you set there does take priority over Print, which was checked on Chrome 156.
 
@@ -30,9 +30,9 @@ You can change the key at `chrome://extensions/shortcuts` (in Firefox, `about:ad
 | ⇧↵ on a group | expand it and collapse the other groups in that window |
 | ⌘↵ on a bookmark or history entry | open it in the current tab |
 | ⌘⌫ | close the selected tab and stay in the switcher |
-| Esc, ⌥K again, or click outside | close |
+| Esc, ⌃K again, or click outside | close |
 
-**Minimal first:** only the search bar shows until you type, with a hint of where ↵ goes. **⌥K then ↵** switches to your previous tab, like alt-tab. ↓ on an empty query shows the recent-tabs list.
+**Minimal first:** only the search bar shows until you type, with a hint of where ↵ goes. **⌃K then ↵** switches to your previous tab, like alt-tab. ↓ on an empty query shows the recent-tabs list.
 
 **Query syntax** follows fzf:
 

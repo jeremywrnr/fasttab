@@ -426,7 +426,7 @@ let toggleKey: ((e: KeyboardEvent) => boolean) | null = null;
 
 async function shortcutHint(): Promise<void> {
   const sc = OVERLAY ? await ov<string>({ t: 'ov:shortcut' }) : await currentShortcut();
-  if (__FIREFOX__) toggleKey = shortcutMatcher(sc || 'Alt+K');
+  if (__FIREFOX__) toggleKey = shortcutMatcher(sc || (navigator.platform.startsWith('Mac') ? 'MacCtrl+K' : 'Alt+K'));
   $shortcut.hidden = false;
   $shortcut.textContent = sc || 'shortcut';
   $shortcut.title = 'Change the fasttab shortcut';

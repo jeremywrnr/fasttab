@@ -275,7 +275,7 @@ chrome.runtime.onInstalled.addListener(() => void init());
 void init();
 
 // ------------------------------------------------------------------ overlay
-// ⌥K injects a centered frame (Alfred-style) into the current page. Pages an
+// ⌃K (Alt+K off macOS) injects a centered frame (Alfred-style) into the current page. Pages an
 // extension may not script (browser UI pages, new tab, add-on stores) get the
 // toolbar popup instead. Each overlay carries a one-time token so a web page
 // that frames popup.html on its own cannot drive it.

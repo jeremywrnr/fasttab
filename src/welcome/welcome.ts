@@ -10,7 +10,7 @@ const $steps = document.getElementById('steps')!;
 const $why = document.getElementById('why')!;
 const $list = document.getElementById('list')!;
 
-$why.textContent = 'The default is ⌥K. If another extension already holds it, or you want a different key (⌘P works in Chrome and wins over Print), set it in the browser shortcut settings:';
+$why.textContent = 'The default is ⌃K (Alt+K on Windows/Linux). If another extension already holds it, or you want a different key (⌘P works in Chrome and wins over Print), set it in the browser shortcut settings:';
 const steps = __FIREFOX__
   ? ['Click the button below (or open about:addons → ⚙ → Manage Extension Shortcuts).', 'Find fasttab and click the shortcut box.', 'Press the keys you want.']
   : ['Click the button below.', 'Find fasttab → “Activate the extension” and click the pencil.', 'Press the keys you want.'];
@@ -23,7 +23,7 @@ for (const s of steps) {
 async function check(): Promise<void> {
   const cmds = await chrome.commands.getAll();
   const sc = cmds.find((c) => c.name === 'open-switcher')?.shortcut ?? '';
-  $current.textContent = sc || '⌥K (default)';
+  $current.textContent = sc || 'none';
   $ok.hidden = !sc;
 }
 
